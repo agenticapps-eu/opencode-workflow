@@ -29,15 +29,23 @@ git commit -m "chore: fork opencode-workflow from codex-workflow + opencode bind
 
 ## 3. Wire the shared submodule
 
-`.gitmodules` is present but the gitlink is not. Re-attach it (the
-vendored content currently sitting in `vendor/agenticapps-shared/` is a
-plain copy):
+`.gitmodules` is present but the gitlink is not — and step 2's
+`git add -A` will have committed the plain copy at
+`vendor/agenticapps-shared/` as **normal files** in the index. Clear it
+from the index first, then attach the real submodule (`--force` accepts
+the pre-existing `.gitmodules` entry):
 
 ```bash
-rm -rf vendor/agenticapps-shared
-git submodule add https://github.com/agenticapps-eu/agenticapps-shared vendor/agenticapps-shared
+git rm -r --cached vendor/agenticapps-shared
+rm -rf vendor/agenticapps-shared .git/modules/vendor/agenticapps-shared
+git submodule add --force https://github.com/agenticapps-eu/agenticapps-shared vendor/agenticapps-shared
+git submodule status        # expect one line: <sha> vendor/agenticapps-shared (heads/main)
 git commit -m "chore: attach agenticapps-shared submodule"
 ```
+
+> Tip: to avoid this entirely on a fresh init, exclude the vendored copy
+> before the first `git add` (`echo 'vendor/agenticapps-shared/' >> .git/info/exclude`),
+> then run the `git submodule add` above.
 
 ## 4. Create the remote
 

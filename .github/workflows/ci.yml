@@ -7,10 +7,46 @@ on:
     branches: [main]
 
 jobs:
-  phase-0:
+  checks:
     runs-on: ubuntu-latest
     steps:
-      - name: Phase 0 — bootstrap-only
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install jq
+        run: sudo apt-get update -y && sudo apt-get install -y jq
+
+      - name: Validate JSON
         run: |
-          echo "phase-0: trivial CI placeholder; real checks land in Phase 7"
-          exit 0
+          set -e
+          for j in opencode.json .planning/config.json \
+                   skills/setup-opencode-agenticapps-workflow/snapshot/planning-config.json; do
+            jq -e . "$j" >/dev/null && echo "valid: $j"
+          done
+
+      - name: Shell syntax check
+        run: |
+          set -e
+          for s in install.sh migrations/check-snapshot-parity.sh migrations/run-tests.sh; do
+            bash -n "$s" && echo "ok: $s"
+          done
+
+      - name: Snapshot drift guard
+        run: bash migrations/check-snapshot-parity.sh
+
+      - name: Migration tests
+        run: bash migrations/run-tests.sh
+
+      - name: No residual Codex bindings in load-bearing files
+        run: |
+          set -e
+          hits=$(grep -rniE '\.codex/|CODEX_HOME|CODEX_SKILLS|command -v codex|codex --version|"host": *"codex"' \
+            AGENTS.md install.sh opencode.json .opencode/ \
+            skills/ migrations/*.md .planning/config.json 2>/dev/null \
+            | grep -v 'check-snapshot-parity' || true)
+          if [ -n "$hits" ]; then
+            echo "Found residual Codex host bindings:"; echo "$hits"; exit 1
+          fi
+          echo "clean: no residual Codex bindings"
