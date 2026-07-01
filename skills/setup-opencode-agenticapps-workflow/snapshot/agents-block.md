@@ -103,44 +103,55 @@ with the rationale.
 
 | Gate | Bound skill | Applies to scaffolder? |
 |---|---|---|
-| brainstorm-ui | `opencode-brainstorming` | No (no UI) |
-| brainstorm-architecture | `opencode-brainstorming` | Yes (when adding skills/templates/migrations) |
+Gates marked **(Superpowers)** or **(GSD)** bind to the upstream opencode skills
+(installed via the Superpowers plugin and `npx gsd-opencode`); see `docs/BINDING.md`.
+The rest are AgenticApps/gstack gates shipped by this repo.
+
+| Gate | Bound skill | Applies to scaffolder? |
+|---|---|---|
+| brainstorm-ui | `superpowers:brainstorming` (Superpowers) | No (no UI) |
+| brainstorm-architecture | `superpowers:brainstorming` (Superpowers) | Yes (when adding skills/templates/migrations) |
 | design-shotgun | `opencode-design-shotgun` | No (no UI) |
 | design-critique | `opencode-design-critique` | No (no UI) |
-| tdd | `opencode-tdd` | Yes (any logic in `install.sh` / `run-tests.sh`) |
+| tdd | `superpowers:test-driven-development` (Superpowers) | Yes (any logic in `install.sh` / `run-tests.sh`) |
 | ui-preview | `opencode-qa` (preview mode) | No (no UI) |
-| verification | `opencode-verification` | Yes (always) |
+| verification | `superpowers:verification-before-completion` (Superpowers) | Yes (always) |
 | spec-review | `opencode-spec-review` | Yes (always) |
-| code-review | `opencode-code-review` | Yes (always) |
+| code-review | `superpowers:requesting-code-review` (Superpowers) | Yes (always) |
 | security | `opencode-cso` | Yes (executable scripts) |
 | database-security | `opencode-database-sentinel-audit` | No (no DB) |
 | qa | `opencode-qa` | No (no dev server) |
 | impeccable-audit | `opencode-impeccable-audit` | No (no UI) |
 | db-pre-launch-audit | `opencode-database-sentinel-audit` | No (no DB) |
-| branch-close | `opencode-finishing-branch` | Yes (always) |
+| branch-close | `superpowers:finishing-a-development-branch` (Superpowers) | Yes (always) |
 
 ## Skill routing
 
 For any task in this scaffolder repo, route through the trigger
 skill's task-size table:
 
-- **Tiny** (typo, comment, README) → `opencode-verification`
-- **Small** (single-file logic) → `opencode-tdd` → `opencode-verification` → `opencode-finishing-branch`
-- **Medium** (new skill, new template, new migration) → `$gsd-discuss-phase` → `$gsd-plan-phase` → `$gsd-execute-phase`
+- **Tiny** (typo, comment, README) → `superpowers:verification-before-completion`
+- **Small** (single-file logic) → `superpowers:test-driven-development` → `superpowers:verification-before-completion` → `superpowers:finishing-a-development-branch`
+- **Medium** (new skill, new template, new migration) → `/gsd-discuss-phase` → `/gsd-plan-phase` → `/gsd-execute-phase` (GSD)
 - **Large** (cross-cutting refactor, new lifecycle, breaking changes) → same as medium plus `opencode-cso` for any security-sensitive scripts
 
-Bug reports route through `$gsd-debug` (the four-phase
-Observe → Hypothesize → Test → Conclude protocol).
+Bug reports route through `/gsd-debug` (GSD) or
+`superpowers:systematic-debugging` (Observe → Hypothesize → Test → Conclude).
 
 ## Session handoff
 
-At the start of every session, check for `session-handoff.md` in
-the repo root. If it exists and was modified in the last 7 days,
-read it before doing anything else and confirm what was found.
+At the start of every session, check for `.opencode/session-handoff.md`.
+If it exists and was modified in the last 7 days, read it before doing
+anything else and confirm what was found. **Only read the opencode
+handoff** — do NOT read a bare root `session-handoff.md` or another
+host's handoff (e.g. the Codex host's `session-handoff.md`, which
+lives under its own marker dir); handoffs are
+host-scoped so multiple hosts can share one working tree without
+cross-contaminating context.
 
 Before ending any session — when asked to exit, when the final
-task is done, or when context is getting full — write a
-`session-handoff.md` in the repo root. The file is in `.gitignore`
+task is done, or when context is getting full — write
+`.opencode/session-handoff.md`. The file is in `.gitignore`
 because it is a working artifact for cross-session continuity, not
 a shipped scaffolder artifact.
 

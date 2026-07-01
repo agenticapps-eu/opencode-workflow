@@ -165,6 +165,29 @@ for d in "$SCAFFOLDER_ROOT"/skills/*/; do
 done
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Slash commands — so `/setup-agenticapps-workflow` and `/update-…` exist in the
+# TUI. Skills are only reachable via the skill tool / natural language; commands
+# give the familiar `/name` entry point (like GSD's /gsd-*).
+# ─────────────────────────────────────────────────────────────────────────────
+OPENCODE_COMMANDS_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/commands"
+if [ -d "$SCAFFOLDER_ROOT/commands" ]; then
+  [ -d "$OPENCODE_COMMANDS_DIR" ] || { echo "${YELLOW}note:${RESET} creating $OPENCODE_COMMANDS_DIR"; [ "$DRY_RUN" -eq 0 ] && mkdir -p "$OPENCODE_COMMANDS_DIR"; }
+  for c in "$SCAFFOLDER_ROOT"/commands/*.md; do
+    [ -e "$c" ] || continue
+    name="$(basename "$c")"
+    dst="$OPENCODE_COMMANDS_DIR/$name"
+    if [ -L "$dst" ] && [ "$(readlink "$dst")" = "$c" ]; then
+      echo "  ${GREEN}OK${RESET}     command $name (already linked)"
+    elif [ -e "$dst" ] && [ ! -L "$dst" ]; then
+      echo "  ${RED}BLOCKED${RESET} command $name (exists, not a symlink)"
+    else
+      [ "$DRY_RUN" -eq 0 ] && { rm -f "$dst"; ln -s "$c" "$dst"; }
+      echo "  ${GREEN}LINK${RESET}   command $name -> /${name%.md}"
+    fi
+  done
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Templates: no secondary symlink needed (v0.2.0 fix)
 # ─────────────────────────────────────────────────────────────────────────────
 # Templates now ship INSIDE the setup skill at
@@ -191,13 +214,38 @@ if [ $FAILED -gt 0 ]; then
   exit 1
 fi
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Bind upstream — GSD + Superpowers (this repo no longer re-ports them)
+# ─────────────────────────────────────────────────────────────────────────────
+# opencode-workflow ships only the AgenticApps layer. GSD and Superpowers are
+# the maintained upstream opencode ports — see docs/BINDING.md. Pass
+# --skip-upstream to install only the AgenticApps skills.
+SKIP_UPSTREAM=0
+for arg in "$@"; do [ "$arg" = "--skip-upstream" ] && SKIP_UPSTREAM=1; done
+
+if [ "$DRY_RUN" -eq 0 ] && [ "$SKIP_UPSTREAM" -eq 0 ]; then
+  echo ""
+  echo "${YELLOW}Binding GSD (rokicool/gsd-opencode) — model routing + /gsd-* commands...${RESET}"
+  if command -v npx >/dev/null 2>&1; then
+    npx -y gsd-opencode --global || echo "${YELLOW}warn:${RESET} gsd-opencode install failed — run 'npx gsd-opencode --global' manually."
+  else
+    echo "${YELLOW}warn:${RESET} npx not found — install Node, then: npx gsd-opencode --global"
+  fi
+  echo ""
+  echo "${YELLOW}Superpowers${RESET} is wired via the \"plugin\" entry in opencode.json"
+  echo "  (superpowers@git+https://github.com/obra/superpowers.git) — opencode loads it on restart."
+  echo "  Verify: ask opencode \"tell me about your superpowers\"."
+fi
+
 echo ""
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "${YELLOW}dry-run only${RESET} — no changes written."
 else
-  echo "${GREEN}done.${RESET} Restart opencode (or open a fresh session) to pick up the new skills."
+  echo "${GREEN}done.${RESET} Restart opencode (or open a fresh session) to pick up everything."
   echo ""
   echo "Next:"
-  echo "  - In a fresh project: \$setup-opencode-agenticapps-workflow"
+  echo "  - Pick GLM 5.2 for the GSD stages:  /gsd-set-profile"
+  echo "  - In a fresh project:               \$setup-opencode-agenticapps-workflow"
   echo "  - In an existing installed project: \$update-opencode-agenticapps-workflow"
+  echo "  - Architecture + caveats:           docs/BINDING.md"
 fi

@@ -18,6 +18,13 @@ spec.
 | Skill prefix | `codex-*` | `opencode-*` |
 | Independent reviewer | `codex exec` | `opencode run` |
 | Fresh install | replays migration chain | snapshot install (see `docs/decisions/0007`) |
+| GSD / Superpowers | re-ported as `codex-*`/`gsd-*` skills | **bound to upstream** (gsd-opencode + Superpowers plugin) — see `docs/BINDING.md` |
+
+> **Binding update:** the `gsd-*` forks and the Superpowers-duplicate gates
+> (`opencode-{brainstorming,code-review,finishing-branch,verification,tdd,systematic-debugging}`)
+> were removed and now bind to upstream. Only the AgenticApps spec-first trigger
+> and the gstack-only gates (`opencode-{cso,qa,design-shotgun,design-critique,database-sentinel-audit,impeccable-audit,spec-review,ts-declare-first}`)
+> remain custom in this repo.
 
 ## Inherited provenance
 

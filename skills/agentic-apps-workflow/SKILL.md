@@ -70,10 +70,10 @@ violation.
 
 | Size | Heuristic | Required skills (in order) |
 |---|---|---|
-| **Tiny** | One-line typo, comment edit, README tweak, no behavior change | `opencode-verification` |
-| **Small** | Single-file logic change, isolated bug fix, ≤ ~20 lines diff | `opencode-tdd` → `opencode-verification` → `opencode-finishing-branch` |
-| **Medium** | Multi-file feature, new endpoint, new component, new test class | `$gsd-discuss-phase` → `$gsd-plan-phase` → `$gsd-execute-phase` (auto-invokes the gate skills bound in Step 3) |
-| **Large** | Cross-cutting refactor, new service, new data shape, new infrastructure | `$gsd-discuss-phase` → `$gsd-plan-phase` → `$gsd-execute-phase` plus `opencode-cso`, `opencode-database-sentinel-audit`, `opencode-impeccable-audit` per gate triggers in Step 3 |
+| **Tiny** | One-line typo, comment edit, README tweak, no behavior change | `superpowers:verification-before-completion` |
+| **Small** | Single-file logic change, isolated bug fix, ≤ ~20 lines diff | `superpowers:test-driven-development` → `superpowers:verification-before-completion` → `superpowers:finishing-a-development-branch` |
+| **Medium** | Multi-file feature, new endpoint, new component, new test class | `/gsd-discuss-phase` → `/gsd-plan-phase` → `/gsd-execute-phase` (auto-invokes the gate skills bound in Step 3) |
+| **Large** | Cross-cutting refactor, new service, new data shape, new infrastructure | `/gsd-discuss-phase` → `/gsd-plan-phase` → `/gsd-execute-phase` plus `opencode-cso`, `opencode-database-sentinel-audit`, `opencode-impeccable-audit` per gate triggers in Step 3 |
 
 If the request matches multiple rows, pick the higher one. The
 commitment block in Step 0 names the chosen size — this commits you to
@@ -95,19 +95,19 @@ rows, judgment picks the higher one (the labeled fallback edge).
 ```mermaid
 flowchart TD
   start[Code task received] --> kind{Intent?}
-  kind -->|bug / unexpected behavior| dbg["$gsd-debug → opencode-systematic-debugging"]
-  kind -->|quick experiment, GSD bookkeeping| quick["$gsd-quick"]
+  kind -->|bug / unexpected behavior| dbg["/gsd-debug → superpowers:systematic-debugging"]
+  kind -->|quick experiment, GSD bookkeeping| quick["/gsd-quick"]
   kind -->|build / change / refactor| size{Task size? Step 1}
-  size -->|tiny| tiny[opencode-verification → commit]
-  size -->|small| small[opencode-tdd → opencode-verification → opencode-finishing-branch]
-  size -->|medium or large| disc["$gsd-discuss-phase {N}"]
+  size -->|tiny| tiny[superpowers:verification-before-completion → commit]
+  size -->|small| small[superpowers:test-driven-development → superpowers:verification-before-completion → superpowers:finishing-a-development-branch]
+  size -->|medium or large| disc["/gsd-discuss-phase {N}"]
   size -.->|ambiguous: matches two rows → pick the HIGHER size| size
-  disc --> plan["$gsd-plan-phase {N}"]
-  plan --> exec["$gsd-execute-phase {N}"]
+  disc --> plan["/gsd-plan-phase {N}"]
+  plan --> exec["/gsd-execute-phase {N}"]
   exec --> gates{Gate trigger fires? Step 3}
   gates -->|yes| gaterun[Run the bound opencode-* gate skill]
   gaterun --> exec
-  gates -->|all clear| close[opencode-finishing-branch]
+  gates -->|all clear| close[superpowers:finishing-a-development-branch]
   tiny --> report[REPORT: commitment list satisfied]
   small --> report
   close --> report
@@ -118,14 +118,14 @@ flowchart TD
 | User intent | Entry point |
 |---|---|
 | Tiny or small task | invoke gate skills directly per Step 1 — no GSD orchestration |
-| Bug or unexpected behavior | `$gsd-debug` (auto-invokes `opencode-systematic-debugging`) |
-| Quick experiment with GSD bookkeeping | `$gsd-quick` |
-| Surface open questions before planning | `$gsd-discuss-phase {N}` |
-| Author a phase plan | `$gsd-plan-phase {N}` |
-| Execute a planned phase | `$gsd-execute-phase {N}` |
+| Bug or unexpected behavior | `/gsd-debug` (auto-invokes `superpowers:systematic-debugging`) |
+| Quick experiment with GSD bookkeeping | `/gsd-quick` |
+| Surface open questions before planning | `/gsd-discuss-phase {N}` |
+| Author a phase plan | `/gsd-plan-phase {N}` |
+| Execute a planned phase | `/gsd-execute-phase {N}` |
 
 `{N}` is the phase number from the project's `ROADMAP.md`.
-`gsd-execute-phase` is the heavyweight orchestrator: it walks each plan
+`/gsd-execute-phase` (GSD, upstream) is the heavyweight orchestrator: it walks each plan
 in the phase, fires the applicable gates from Step 3, and refuses to
 mark any task complete without verification evidence (per spec/06).
 
@@ -142,8 +142,8 @@ binding contract for `full` conformance per spec/09.
 
 | Gate | Bound skill | Notes |
 |---|---|---|
-| `brainstorm-ui` | `opencode-brainstorming` | Same skill covers UI and architecture; body branches on the prompt |
-| `brainstorm-architecture` | `opencode-brainstorming` | |
+| `brainstorm-ui` | `superpowers:brainstorming` | Same skill covers UI and architecture; body branches on the prompt |
+| `brainstorm-architecture` | `superpowers:brainstorming` | |
 | `design-shotgun` | `opencode-design-shotgun` | Generates ≥3 visual variants and writes them into `CONTEXT.md` |
 | `design-critique` | `opencode-design-critique` | Impeccable-style critique against an existing `UI-SPEC.md` |
 
@@ -151,17 +151,17 @@ binding contract for `full` conformance per spec/09.
 
 | Gate | Bound skill | Notes |
 |---|---|---|
-| `tdd` | `opencode-tdd` | Produces a `test(RED):` + `feat(GREEN):` commit pair atomically |
+| `tdd` | `superpowers:test-driven-development` | Produces a `test(RED):` + `feat(GREEN):` commit pair atomically |
 | `tdd` (new TS module) | `opencode-ts-declare-first` | Strengthens `tdd` for a new TypeScript module's API surface (spec §13): three atomic commits `declare(ts):` → `test(ts):` (RED) → `feat(ts):` (GREEN); refuses to collapse declare + impl into one commit |
 | `ui-preview` | `opencode-qa` (preview mode) | Per-task pre-commit screenshot mode of the same QA skill; the qa skill body branches on `mode=preview` vs `mode=phase-qa` |
-| `verification` | `opencode-verification` | Refuses task completion when `must_have` evidence is missing |
+| `verification` | `superpowers:verification-before-completion` | Refuses task completion when `must_have` evidence is missing |
 
 ### Post-phase
 
 | Gate | Bound skill | Notes |
 |---|---|---|
 | `spec-review` | `opencode-spec-review` | Stage 1; writes `## Stage 1 — Spec compliance` into `REVIEW.md` |
-| `code-review` | `opencode-code-review` | Stage 2; spawns an independent reviewer via `opencode run --model …` per [ADR-0002](../../docs/decisions/0002-stage2-independent-reviewer-on-codex.md) |
+| `code-review` | `superpowers:requesting-code-review` | Stage 2; spawns an independent reviewer via `opencode run --model …` per [ADR-0002](../../docs/decisions/0002-stage2-independent-reviewer-on-codex.md) |
 | `security` | `opencode-cso` | OWASP-aligned security audit; writes `SECURITY.md` |
 | `database-security` | `opencode-database-sentinel-audit` | Same skill, "in-phase" mode |
 | `qa` | `opencode-qa` | Phase-level browser-driven QA mode (distinct from `ui-preview` mode) |
@@ -172,10 +172,10 @@ binding contract for `full` conformance per spec/09.
 
 | Gate | Bound skill | Notes |
 |---|---|---|
-| `branch-close` | `opencode-finishing-branch` | Composes the PR description from the phase artifacts |
+| `branch-close` | `superpowers:finishing-a-development-branch` | Composes the PR description from the phase artifacts |
 
-The `opencode-systematic-debugging` skill is not bound to a spec gate —
-it is the implementation behind `$gsd-debug` for the four-phase
+The `superpowers:systematic-debugging` skill is not bound to a spec gate —
+it is the implementation behind `/gsd-debug` for the four-phase
 Observe → Hypothesize → Test → Conclude protocol.
 
 A gate fires when its trigger condition (per spec/02) is met. The
@@ -253,7 +253,7 @@ spec/06.
 
 ### Commitment block was emitted
 
-The session transcript or `.planning/phases/<N>/SUMMARY.md` contains
+The session transcript or `.planning/phases/<NN>-<slug>/SUMMARY.md` contains
 the `## Workflow commitment` block. If the agent did not emit it, the
 phase is non-conformant and Stage 1 review MUST flag it.
 
@@ -284,8 +284,8 @@ exec` child invocation logged in the phase's `evidence/` directory or
 referenced by command in `REVIEW.md`.
 
 ```bash
-grep -l '^## Stage 1 — Spec compliance' .planning/phases/<N>/REVIEW.md \
-  && grep -l '^## Stage 2 — Code quality' .planning/phases/<N>/REVIEW.md \
+grep -l '^## Stage 1 — Spec compliance' .planning/phases/<NN>-<slug>/REVIEW.md \
+  && grep -l '^## Stage 2 — Code quality' .planning/phases/<NN>-<slug>/REVIEW.md \
   || echo "MISS: REVIEW.md is missing one of the two stages"
 ```
 
@@ -301,7 +301,7 @@ awk '
   /^- Evidence:/ && must { ev++ ; next }
   /^### / && must && !ev { print "MISS evidence: " must; must=""; ev=0 }
   END { if (must && !ev) print "MISS evidence: " must }
-' .planning/phases/<N>/VERIFICATION.md
+' .planning/phases/<NN>-<slug>/VERIFICATION.md
 ```
 
 ### `implements_spec` is current

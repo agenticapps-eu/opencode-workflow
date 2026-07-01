@@ -31,9 +31,12 @@ note() { printf '  %s\n' "$*"; }
 # The artifacts whose end-state the snapshot must capture, and the
 # authoritative source for each (the dogfooded repo IS the end-state).
 # repo-source                              -> snapshot file
+# NOTE: snapshot/docs-decisions-README.md is a FRESH-PROJECT template (a generic,
+# empty ADR index), NOT a mirror of this scaffolder's own docs/decisions/README.md
+# (which lists opencode-workflow's real ADRs). So it is deliberately NOT compared
+# here — a template diverging from the scaffolder's own ADR list is correct.
 declare -A MAP=(
   [".planning/config.json"]="planning-config.json"
-  ["docs/decisions/README.md"]="docs-decisions-README.md"
 )
 
 # AGENTS.md block: extract between the marker pair from the repo's own

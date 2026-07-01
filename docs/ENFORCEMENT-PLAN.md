@@ -2,9 +2,11 @@
 
 This document records which `agenticapps-workflow-core/spec/02-hook-taxonomy.md`
 gates fire for `opencode-workflow`'s **own** development, which gates do not
-apply (with rationale), and which `opencode-*` skill is bound to each.
-It is the host-side companion to `AGENTS.md`'s Workflow Enforcement
-Hooks table.
+apply (with rationale), and which skill is bound to each. Gates marked
+**(Superpowers)** or **(GSD)** bind to the upstream opencode distributions
+(the Superpowers plugin and `npx gsd-opencode`); the rest are this repo's
+`opencode-*` gates. See `docs/BINDING.md` for the binding architecture. It is
+the host-side companion to `AGENTS.md`'s Workflow Enforcement Hooks table.
 
 The scaffolder repo dogfoods its own workflow per Phase 6 of the
 build-out (`docs/dogfood-2026-05-10.md`).
@@ -37,9 +39,10 @@ build-out (`docs/dogfood-2026-05-10.md`).
    whose triggers cannot occur are listed under "Spec Deltas" with
    the rationale per spec/09.
 4. `skills/agentic-apps-workflow/SKILL.md` carries
-   `implements_spec: 0.4.0` in frontmatter; the gate skills, GSD
-   entry-point skills, and lifecycle skills all cite
-   `implements_spec: 0.4.0`.
+   `implements_spec: 0.4.0` in frontmatter; the AgenticApps gate skills
+   shipped by this repo (`opencode-*`) all cite `implements_spec: 0.4.0`.
+   The GSD entry-point and Superpowers discipline skills are bound
+   upstream (see `docs/BINDING.md`), not re-shipped here.
 5. Each phase produces CONTEXT.md / PLAN.md / VERIFICATION.md /
    REVIEW.md as well-formed, machine-discoverable artifacts. (For
    the build-out itself the artifacts live in PR descriptions and
@@ -53,14 +56,14 @@ build-out (`docs/dogfood-2026-05-10.md`).
 
 | Gate | Bound skill | When fires here | Notes |
 |---|---|---|---|
-| `brainstorm-architecture` | `opencode-brainstorming` (architecture mode) | Adding a new skill, template, or migration | The Phase 0 ADR set is the reference shape |
-| `tdd` | `opencode-tdd` | Any task adding logic to `install.sh` or `migrations/run-tests.sh` | Markdown content (skills, templates, ADRs) does not require TDD |
+| `brainstorm-architecture` | `superpowers:brainstorming` (Superpowers, architecture mode) | Adding a new skill, template, or migration | The Phase 0 ADR set is the reference shape |
+| `tdd` | `superpowers:test-driven-development` (Superpowers) | Any task adding logic to `install.sh` or `migrations/run-tests.sh` | Markdown content (skills, templates, ADRs) does not require TDD |
 | `tdd` (new TS module) | `opencode-ts-declare-first` | A new TypeScript module's public API surface (spec §13) | Strengthens `tdd`: three atomic commits `declare(ts):` → `test(ts):` (RED) → `feat(ts):` (GREEN). Does not fire on this markdown scaffolder; bound for downstream TS projects |
-| `verification` | `opencode-verification` | Always — every PR | Evidence shapes here are typically grep results, file existence, and `run-tests.sh` output |
+| `verification` | `superpowers:verification-before-completion` (Superpowers) | Always — every PR | Evidence shapes here are typically grep results, file existence, and `run-tests.sh` output |
 | `spec-review` | `opencode-spec-review` | Always — every PR | Stage 1 of two-stage review |
-| `code-review` | `opencode-code-review` | Always — every PR | Stage 2; `opencode run` child process per ADR-0002 |
+| `code-review` | `superpowers:requesting-code-review` (Superpowers) | Always — every PR | Stage 2; `opencode run` child process per ADR-0002 |
 | `security` | `opencode-cso` | When changing `install.sh` or any executable script | OWASP-aligned scan; for a scaffolder the relevant axes are: command injection, path traversal, secret exposure, unsafe `eval` of remote content |
-| `branch-close` | `opencode-finishing-branch` | Every PR | The PRs for Phases 1–6 each demonstrate this binding |
+| `branch-close` | `superpowers:finishing-a-development-branch` (Superpowers) | Every PR | The PRs for Phases 1–6 each demonstrate this binding |
 
 ### Spec Deltas — gates whose trigger cannot occur
 
@@ -72,7 +75,7 @@ cannot occur (spec/09 final paragraph in "full" section).
 
 | Gate | Bound skill (for downstream projects) | Why no trigger here |
 |---|---|---|
-| `brainstorm-ui` | `opencode-brainstorming` (ui mode) | The scaffolder ships no UI. All contributors interact via CLI / git / markdown. |
+| `brainstorm-ui` | `superpowers:brainstorming` (Superpowers, ui mode) | The scaffolder ships no UI. All contributors interact via CLI / git / markdown. |
 | `design-shotgun` | `opencode-design-shotgun` | Same — no visual surface to vary. |
 | `design-critique` | `opencode-design-critique` | Same — no UI to critique. |
 | `ui-preview` | `opencode-qa` (preview mode) | Same — no frontend code, no dev server. |

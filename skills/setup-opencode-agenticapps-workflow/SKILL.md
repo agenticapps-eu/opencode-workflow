@@ -158,7 +158,7 @@ present); in interactive mode show the diff before writing.
 
 15. **Surface follow-ups:**
     - Project is now at `opencode-workflow v$LATEST`
-    - Next: `$gsd-discuss-phase 1` to start the first phase
+     - Next: `/gsd-discuss-phase 1` to start the first phase
     - Future updates: `$update-opencode-agenticapps-workflow` reads
       `.opencode/workflow-version.txt` and applies pending migrations
 
