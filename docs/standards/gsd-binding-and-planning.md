@@ -27,20 +27,26 @@ binding brief / ADR.
 
 ## 2. Follow GSD's original `.planning/` layout — the TÂCHES standard
 
-All hosts use GSD's native project state, unchanged:
+All hosts use GSD's native project state (get-shit-done v1.42.x layout),
+unchanged. Phase work lives in **per-phase subdirectories**:
 
 ```
 PROJECT.md  REQUIREMENTS.md  ROADMAP.md  STATE.md
 .planning/
   research/
-  <phase>-CONTEXT.md   <phase>-<N>-PLAN.md   <phase>-VERIFICATION.md
+  phases/<NN>-<slug>/                 # e.g. 03-checkout/ — <NN> zero-padded phase, <slug> kebab title
+    <NN>-CONTEXT.md                   # /gsd-discuss-phase
+    <NN>-<N>-PLAN.md                  # /gsd-plan-phase
+    <NN>-VERIFICATION.md              # verify
+    REVIEW.md  QA.md  DB-AUDIT.md     # AgenticApps gate outputs, same phase dir
   quick/<NNN>-<slug>/
-docs/decisions/NNNN-<slug>.md        # ADRs (already common across hosts)
+docs/decisions/NNNN-<slug>.md         # ADRs (already common across hosts)
 ```
 
-**Do not invent alternative phase layouts.** In particular, `codex-workflow`'s
-`.planning/phases/<NN>/…` convention is superseded by the GSD-native layout so
-plans are byte-compatible across hosts. Whatever the bound GSD distribution
+**Do not invent alternative phase layouts.** The canonical form is
+`.planning/phases/<NN>-<slug>/`. codex-workflow's earlier **bare**
+`.planning/phases/<NN>/` (no slug) is superseded by the slugged GSD-native form
+so plans are byte-compatible across hosts. Whatever the bound GSD distribution
 writes is authoritative; the AgenticApps layer reads it, it does not reshape it.
 
 ## 3. The AgenticApps layer is a thin per-host binding
@@ -91,7 +97,7 @@ decision; tiny/small stay fast. (See the per-repo enforcement brief.)
 ## Conformance checklist (per repo)
 
 - [ ] Binds an upstream GSD distribution (no custom `gsd-*` port).
-- [ ] Emits GSD's native `.planning/` layout (no invented phase dirs).
+- [ ] Emits GSD's native `.planning/phases/<NN>-<slug>/` layout (no bare-number or flat variants).
 - [ ] AgenticApps layer limited to trigger + gstack gates + snapshot + host file.
 - [ ] `.planning/config.<host>.json` namespaced; handoff host-scoped.
 - [ ] Medium/large enforce review gate + ADR.

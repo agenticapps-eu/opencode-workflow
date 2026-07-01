@@ -145,7 +145,8 @@ At the start of every session, check for `.opencode/session-handoff.md`.
 If it exists and was modified in the last 7 days, read it before doing
 anything else and confirm what was found. **Only read the opencode
 handoff** — do NOT read a bare root `session-handoff.md` or another
-host's handoff (e.g. `.codex/session-handoff.md`); handoffs are
+host's handoff (e.g. the Codex host's `session-handoff.md`, which
+lives under its own marker dir); handoffs are
 host-scoped so multiple hosts can share one working tree without
 cross-contaminating context.
 
