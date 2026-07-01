@@ -15,8 +15,8 @@ beside `codex-workflow`:
 # Note: ~ does NOT expand inside double quotes — use $HOME (which does).
 mkdir -p "$HOME/Sourcecode/agenticapps"
 mv "$HOME/Documents/Claude/Projects/agentic-workflow/opencode-workflow" \
-   "$HOME/Sourcecode/agenticapps/opencode-workflow"
-cd ~/Sourcecode/agenticapps/opencode-workflow
+   "$HOME/Sourcecode/agenticapps-eu/opencode-workflow"
+cd ~/Sourcecode/agenticapps-eu/opencode-workflow
 ```
 
 ## 2. Initialize git

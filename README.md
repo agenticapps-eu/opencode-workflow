@@ -8,6 +8,13 @@ It implements the canonical contract defined in
 [`agenticapps-workflow-core`](https://github.com/agenticapps-eu/agenticapps-workflow-core)
 as native opencode skills.
 
+> **This repo is a *binding*, not a re-port.** GSD and Superpowers run on
+> opencode via their maintained upstreams ([gsd-opencode](https://github.com/rokicool/gsd-opencode),
+> [Superpowers](https://github.com/obra/superpowers)); this repo ships only the
+> AgenticApps layer (spec-first trigger, gstack gates, snapshot install) and
+> binds the two. See **[`docs/BINDING.md`](docs/BINDING.md)** for the
+> architecture, install order, and model-routing (GSD owns it).
+
 > **Forked from [`codex-workflow`](https://github.com/agenticapps-eu/codex-workflow).**
 > New clone? Read **[`SETUP-REMOTE.md`](SETUP-REMOTE.md)** for git/remote
 > init and pointing opencode at GLM 5.2. The binding layer and the
