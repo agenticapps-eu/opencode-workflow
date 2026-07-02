@@ -9,6 +9,24 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
+### Changed
+- **Documented the `.planning/phases/` gitignore discipline.** Workflow-testbed
+  round-2 benchmark feedback traced a gitignore friction (phase evidence
+  silently uncommitted because `.planning/phases/` was ignored) to the
+  testbed/claude scaffolder, not this one — the opencode scaffolder emits no
+  such rule: `install.sh` and `setup-opencode-agenticapps-workflow` write no
+  host `.gitignore`, and this repo's own `.gitignore` targets only
+  `.planning/cache/` and `.planning/state/`. Promoted the round-2 run's
+  improvised fix to documented behavior: a new Verification Check in the
+  `agentic-apps-workflow` trigger skill probes `git check-ignore
+  .planning/phases/` before committing evidence and, if the host project
+  ignores it, un-ignores the path in a dedicated chore commit flagged in
+  RUN-NOTES/handoff. Mirrors the claude-workflow amendment in
+  `docs/standards/gsd-binding-and-planning.md` (conformance checklist: "MUST
+  NOT gitignore `.planning/phases/` — phase artifacts are committed"). No
+  migration: scaffolder output is unchanged. `check-snapshot-parity.sh` PASS;
+  `run-tests.sh` 46 PASS / 1 SKIP.
+
 ### Backlog (beyond conformance)
 
 - Plugin packaging — re-evaluate after in-the-wild use (ADR-0001 F2).
