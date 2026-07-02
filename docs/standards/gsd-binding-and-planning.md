@@ -98,6 +98,7 @@ decision; tiny/small stay fast. (See the per-repo enforcement brief.)
 
 - [ ] Binds an upstream GSD distribution (no custom `gsd-*` port).
 - [ ] Emits GSD's native `.planning/phases/<NN>-<slug>/` layout (no bare-number or flat variants).
+- [ ] MUST NOT gitignore `.planning/phases/` — phase artifacts are committed. (A host project that ignores it MUST un-ignore it in a dedicated chore commit before committing phase evidence; mirrors the claude-workflow amendment.)
 - [ ] AgenticApps layer limited to trigger + gstack gates + snapshot + host file.
 - [ ] `.planning/config.<host>.json` namespaced; handoff host-scoped.
 - [ ] Medium/large enforce review gate + ADR.

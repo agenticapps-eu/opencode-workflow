@@ -251,6 +251,28 @@ Before claiming any phase complete, run the following checks against
 the working tree. Each check is a permitted evidence shape per
 spec/06.
 
+### Phase artifacts are committed (not gitignored)
+
+Phase evidence lives under `.planning/phases/` and MUST be tracked by
+git. A host project — often one scaffolded by another tool, or
+carrying a template `.gitignore` — that ignores `.planning/phases/`
+silently breaks every downstream check below: the grep/awk probes
+scan files that never reach the branch. Probe before committing
+evidence:
+
+```bash
+git check-ignore .planning/phases/ \
+  && echo "BLOCKED: .planning/phases/ is gitignored" \
+  || echo "ok: .planning/phases/ is tracked"
+```
+
+If the host project gitignores `.planning/phases/`, un-ignore it in a
+dedicated chore commit **before** committing phase evidence, and flag
+it in RUN-NOTES/handoff. (Workflow-testbed round-2 benchmark feedback:
+the opencode run handled this friction correctly by un-ignoring the
+path in a dedicated chore commit; this check promotes that from
+improvisation to documented behavior.)
+
 ### Commitment block was emitted
 
 The session transcript or `.planning/phases/<NN>-<slug>/SUMMARY.md` contains
