@@ -1,6 +1,6 @@
 ---
 name: setup-opencode-agenticapps-workflow
-version: 0.2.1
+version: 0.3.0
 implements_spec: 0.4.0
 description: |
   Bootstrap a fresh project with the opencode-workflow scaffolding by
@@ -110,6 +110,32 @@ present); in interactive mode show the diff before writing.
    `$SNAP/planning-config.json`. This is the **latest** hook config
    (all migrations already folded in), so no incremental edits follow.
 
+8b. **Seed the `knowledge_capture` block (spec §15)** — the vault note
+    destination is per-repo config, with `<repo-name>` written out
+    literally at config time (never a runtime placeholder). It is NOT
+    baked into `$SNAP/planning-config.json` (that snapshot is generic;
+    the note path is repo-specific), so seed it here with the repo name
+    resolved. Idempotent — skip if the block already exists (a co-installed
+    codex/claude host may have seeded it):
+
+    ```bash
+    TPL="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/setup-opencode-agenticapps-workflow/templates/config-knowledge-capture.json"
+    if ! jq -e '.knowledge_capture' .planning/config.json >/dev/null 2>&1; then
+      REPO_NAME="$(basename "$(git rev-parse --show-toplevel)")"
+      KC="$(jq -c --arg name "$REPO_NAME" \
+              '.knowledge_capture.note |= gsub("<repo-name>"; $name) | .knowledge_capture' \
+              "$TPL")"
+      jq --argjson kc "$KC" '. + {knowledge_capture: $kc}' \
+         .planning/config.json > .planning/config.json.tmp \
+        && mv .planning/config.json.tmp .planning/config.json
+    fi
+    ```
+
+    The block is host-neutral (`enabled` + `note` only); `enabled: true`
+    by default. A machine without the vault folder is handled at trigger
+    time by the skill's graceful skip (spec §15.3) — do NOT create the
+    folder here.
+
 9. **`AGENTS.md` workflow section** — if `AGENTS.md` lacks the marker
    pair, insert (at top, after any existing title):
 
@@ -142,10 +168,12 @@ present); in interactive mode show the diff before writing.
 13. **Post-checks:**
     - `.opencode/workflow-config.md` exists, no unsubstituted `{{...}}`
     - `.planning/config.json` is valid JSON with the expected `hooks`
-      keys
+      keys, and a `knowledge_capture` block whose `note` has the
+      `<repo-name>` placeholder resolved (no literal `<repo-name>`)
     - `AGENTS.md` contains exactly one `BEGIN/END: agentic-apps-workflow`
       marker pair, and the body contains the §11 "Coding Discipline"
-      heading (proves the latest snapshot, not the v0.1.0 baseline)
+      heading (proves the latest snapshot, not the v0.1.0 baseline) and
+      the "Knowledge Capture — Ritual Tail (spec §15)" heading
     - `docs/decisions/README.md` exists
     - `.opencode/workflow-version.txt` reads `$LATEST`
 

@@ -356,6 +356,159 @@ test_migration_0004() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Migration 0005 — Knowledge capture (spec §15)
+# Testable non-interactively: the config merge resolves <repo-name> and
+# preserves a pre-existing (codex) key; the AGENTS.md section insert is present
+# and idempotent; the version bump round-trips.
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_migration_0005() {
+  echo ""
+  echo "${YELLOW}=== Migration 0005 — Knowledge capture (spec §15) ===${RESET}"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "  ${YELLOW}SKIP${RESET} jq not available — knowledge-capture test not run"
+    SKIP=$((SKIP+1)); return
+  fi
+
+  local kctpl="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/templates/config-knowledge-capture.json"
+  local notetpl="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/templates/obsidian-learnings-note.md"
+  local agentstpl="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/templates/agents-md-additions.md"
+
+  # Templates ship.
+  if [ -f "$kctpl" ] && [ -f "$notetpl" ] && [ -f "$agentstpl" ]; then
+    echo "  ${GREEN}PASS${RESET} knowledge-capture templates ship (config + note + agents-md)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} knowledge-capture templates missing"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  # Config template is host-neutral (enabled + note only; no host key).
+  if jq -e '.knowledge_capture | (has("enabled") and has("note")) and ((keys | length) == 2)' "$kctpl" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} config template is host-neutral (enabled + note only)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} config template is not host-neutral"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Note skeleton declares hosts: [opencode].
+  if grep -qE '^hosts: \[opencode\]$' "$notetpl"; then
+    echo "  ${GREEN}PASS${RESET} note skeleton declares hosts: [opencode]"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} note skeleton missing hosts: [opencode]"
+    FAIL=$((FAIL+1))
+  fi
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+
+  # Step 1 — config merge on a codex co-install (host-namespaced-looking hooks
+  # present). The merge must add knowledge_capture, resolve <repo-name>, and
+  # preserve the pre-existing key.
+  cat > "$tmp/config.json" <<'JSON'
+{ "host": "opencode", "hooks": { "per_task": { "tdd": { "skill": "opencode-tdd" } } } }
+JSON
+
+  assert_check "idempotency: fresh config needs knowledge_capture" \
+    "jq -e '.knowledge_capture' config.json >/dev/null" "$tmp" "not-applied"
+
+  ( cd "$tmp" \
+    && KC="$(jq -c --arg name "widget-repo" '.knowledge_capture.note |= gsub("<repo-name>"; $name) | .knowledge_capture' "$kctpl")" \
+    && jq --argjson kc "$KC" '. + {knowledge_capture: $kc}' config.json > config.tmp && mv config.tmp config.json )
+
+  assert_check "after apply: knowledge_capture present" \
+    "jq -e '.knowledge_capture.enabled == true' config.json >/dev/null" "$tmp" "applied"
+
+  if ( cd "$tmp" && jq -e '.knowledge_capture.note | endswith("widget-repo.md") and (contains("<repo-name>") | not)' config.json >/dev/null ); then
+    echo "  ${GREEN}PASS${RESET} <repo-name> resolved in note path (no placeholder remains)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} <repo-name> not resolved in note path"
+    FAIL=$((FAIL+1))
+  fi
+
+  if ( cd "$tmp" && jq -e '.hooks.per_task.tdd.skill == "opencode-tdd" and .host == "opencode"' config.json >/dev/null ); then
+    echo "  ${GREEN}PASS${RESET} pre-existing config keys preserved through merge"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} pre-existing config keys lost in merge"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Idempotent re-apply: block already present → merge is a no-op on the note.
+  if ( cd "$tmp" && jq -e '.knowledge_capture' config.json >/dev/null ); then
+    echo "  ${GREEN}PASS${RESET} idempotency guard positive on second apply (block preserved verbatim)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} idempotency guard failed"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Rollback removes only the added block.
+  ( cd "$tmp" && jq 'del(.knowledge_capture)' config.json > config.tmp && mv config.tmp config.json )
+  assert_check "after rollback: knowledge_capture removed, base intact" \
+    "jq -e '.knowledge_capture' config.json >/dev/null" "$tmp" "not-applied"
+
+  # Step 2 — AGENTS.md section insert. Synthetic AGENTS.md with the marker pair
+  # but no section; apply the migration's extract+insert; assert section present
+  # and a second apply is a no-op (idempotency grep).
+  printf '# AGENTS\n\n<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->\n\n## Something\n\nbody\n\n<!-- END: agentic-apps-workflow sections -->\n' > "$tmp/AGENTS.md"
+
+  ( cd "$tmp"
+    SECFILE="$(mktemp)"
+    awk '
+      /^## Knowledge Capture — Ritual Tail \(spec §15\)/ {f=1}
+      /^<!-- END: agentic-apps-workflow sections -->/    {f=0}
+      f {buf[n++]=$0}
+      END { last=n-1; while (last>=0 && buf[last]=="") last--; for(i=0;i<=last;i++) print buf[i] }
+    ' "$agentstpl" > "$SECFILE"
+    awk -v secfile="$SECFILE" '
+      /^<!-- END: agentic-apps-workflow sections -->/ && !ins {
+        while ((getline line < secfile) > 0) print line
+        close(secfile); print ""; ins=1
+      }
+      { print }
+    ' AGENTS.md > AGENTS.md.tmp && mv AGENTS.md.tmp AGENTS.md
+    rm -f "$SECFILE" )
+
+  if grep -q '^## Knowledge Capture — Ritual Tail (spec §15)$' "$tmp/AGENTS.md" \
+     && grep -q '(opencode)' "$tmp/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} AGENTS.md section inserted with (opencode) host tag"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} AGENTS.md section not inserted correctly"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Section lands INSIDE the marker block (before END).
+  if awk '/<!-- BEGIN: agentic-apps-workflow sections/{b=1} /^## Knowledge Capture/{if(b)k=1} /<!-- END: agentic-apps-workflow sections/{if(k)ok=1} END{exit ok?0:1}' "$tmp/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} section is inside the marker block (before END)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} section landed outside the marker block"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Idempotency: the migration's grep guard is positive now → re-apply is a no-op.
+  assert_check "idempotency: section present → skip re-insert" \
+    "grep -q '^## Knowledge Capture — Ritual Tail (spec §15)' AGENTS.md" "$tmp" "applied"
+
+  # Step 3 — version bump round-trip on a synthetic SKILL.md frontmatter.
+  printf -- '---\nname: agentic-apps-workflow\nversion: 0.2.1\nimplements_spec: 0.4.0\n---\n' > "$tmp/SKILL.md"
+  ( cd "$tmp" && sed -i.bak -E 's/^version: 0\.2\.1$/version: 0.3.0/' SKILL.md && rm -f SKILL.md.bak )
+  if grep -q '^version: 0.3.0$' "$tmp/SKILL.md" && grep -q '^implements_spec: 0.4.0$' "$tmp/SKILL.md"; then
+    echo "  ${GREEN}PASS${RESET} version bump 0.2.1→0.3.0 (implements_spec untouched)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} version bump did not round-trip"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Drift test — the scaffolder's SKILL.md version MUST equal the latest
 # migration's to_version (version is migration-coupled).
 # ─────────────────────────────────────────────────────────────────────────────
@@ -399,6 +552,10 @@ test_repo_layout() {
     migrations/0002-add-ts-declare-first-skill.md \
     migrations/0003-delegate-observability.md \
     migrations/0004-revendor-spec-11.md \
+    migrations/0005-knowledge-capture.md \
+    skills/setup-opencode-agenticapps-workflow/templates/config-knowledge-capture.json \
+    skills/setup-opencode-agenticapps-workflow/templates/obsidian-learnings-note.md \
+    docs/decisions/0008-knowledge-capture.md \
     migrations/test-fixtures/README.md \
     vendor/agenticapps-shared/migrations/lib/helpers.sh \
     vendor/agenticapps-shared/migrations/lib/drift-test.sh \
@@ -442,6 +599,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0004" ]; then
   test_migration_0004
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0005" ]; then
+  test_migration_0005
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then

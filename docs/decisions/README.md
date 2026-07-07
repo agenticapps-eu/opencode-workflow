@@ -1,14 +1,14 @@
 # Architecture decision records
 
-ADRs for `codex-workflow`. Numbered sequentially: `NNNN-slug.md`.
+ADRs for `opencode-workflow`. Numbered sequentially: `NNNN-slug.md`.
 
 The shape follows the AgenticApps workflow's ADR convention —
 status, date, context, decision, consequences, references.
 
-When a `codex-database-sentinel-audit` finding is accepted rather
+When an `opencode-database-sentinel-audit` finding is accepted rather
 than fixed (in projects USING this scaffolder), the accepting ADR
 uses the
-[`adr-db-security-acceptance.md`](../../skills/setup-codex-agenticapps-workflow/templates/adr-db-security-acceptance.md)
+[`adr-db-security-acceptance.md`](../../skills/setup-opencode-agenticapps-workflow/templates/adr-db-security-acceptance.md)
 template shape — risk owner, re-audit date, compensating controls.
 
 ## Index
@@ -21,3 +21,5 @@ template shape — risk owner, re-audit date, compensating controls.
 | [0004](0004-observability-strategy.md) | §10 observability — delegate to agenticapps-observability via a Codex installer | Accepted |
 | [0005](0005-adopt-observability-architecture.md) | Adopt core ADR-0014 observability architecture (generator layer via delegation) | Accepted |
 | [0006](0006-secret-scanner-gitleaks.md) | Secret scanner: stay on gitleaks (adopt core ADR-0015) | Accepted |
+| [0007](0007-snapshot-install.md) | Fresh installs use a snapshot, not migration replay | Accepted |
+| [0008](0008-knowledge-capture.md) | Knowledge capture ritual tail — spec §15 on the opencode host | Accepted |

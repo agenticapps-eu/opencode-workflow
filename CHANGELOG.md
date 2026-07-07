@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `codex-workflow` are documented here.
+All notable changes to `opencode-workflow` are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This repo cites `implements_spec: <version>` against
@@ -34,6 +34,42 @@ in every shipped artifact's frontmatter.
 - Upstream follow-up: `agenticapps-observability` `init` Phase 6 emits the
   §10.8 metadata block to `CLAUDE.md`; making it host-aware (`AGENTS.md` on
   Codex) would remove migration 0003's relocate round-trip.
+
+## [0.3.0] — 2026-07-07
+
+### Added
+- **Knowledge capture ritual tail — core spec §15 (migration `0005`, ADR-0008).**
+  Every ritual — session handoff, plan completion (`/gsd-plan-phase`), phase
+  completion (`/gsd-execute-phase`) — now ends by distilling **1–5 transferable
+  learnings** to **one Obsidian note per repo** in the operator's vault
+  (`~/Obsidian/Memex/40-49 Resources/44 Agentic Coding Learnings/<repo-name>.md`).
+  Wired as an explicit, mechanical prose section on the always-loaded surfaces
+  (the `agentic-apps-workflow` trigger `SKILL.md` and the project `AGENTS.md`),
+  with a `(opencode)` Log host tag. Destination is config-routed via a
+  host-neutral `knowledge_capture {enabled, note}` block in the single shared
+  `.planning/config.json` (opencode does not namespace config); a co-installed
+  codex/claude host reads the same block and writes to the same note. Graceful
+  skip (spec §15.3) when the block is absent, `enabled: false`, or the vault
+  folder is missing — never creates the folder, never fails or commits.
+  - Fresh installs get it from the snapshot (`snapshot/agents-block.md` carries
+    the section) plus a new setup Stage-C seed step that resolves `<repo-name>`
+    from the `config-knowledge-capture.json` template. Existing installs get it
+    via migration `0005` (0.2.1 → 0.3.0), which seeds the block (jq merge,
+    preserving hooks) and inserts the section extracted from the
+    `agents-md-additions.md` template (single source of truth).
+  - New templates: `config-knowledge-capture.json`, `obsidian-learnings-note.md`
+    (`hosts: [opencode]`). `implements_spec` stays `0.4.0` (tracks the last full
+    audit, not §15 wiring).
+
+### Changed
+- **Snapshot parity guard hardened for §15.** `check-snapshot-parity.sh` now
+  compares `.planning/config.json` **modulo** the repo-specific
+  `knowledge_capture` block (its `note` carries the resolved repo name, so it is
+  absent from the generic snapshot; §15.2/ADR-0017), and was made bash-3.2-safe
+  (dropped `declare -A`) so the config comparison runs on macOS, not only CI.
+- `run-tests.sh` adds `test_migration_0005` (config merge resolves `<repo-name>`
+  and preserves a pre-existing key; AGENTS.md section insert + idempotency; the
+  `(opencode)` tag; version-bump round-trip). Drift target is now 0.3.0.
 
 ## [0.2.1] — 2026-06-09
 
