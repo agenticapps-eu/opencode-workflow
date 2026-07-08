@@ -29,7 +29,10 @@
       "tdd": {
         "skill": "superpowers:test-driven-development",
         "fires_when": "task carries tdd=\"true\" marker",
-        "commit_pair": ["test(RED):", "feat(GREEN):"]
+        "commit_pair": [
+          "test(RED):",
+          "feat(GREEN):"
+        ]
       },
       "ui_preview": {
         "skill": "opencode-qa",
@@ -70,7 +73,10 @@
             "skill": "opencode-database-sentinel-audit",
             "mode": "phase-scoped",
             "fires_when": "scope matches supabase|postgres|mongodb|firebase|mysql",
-            "blocking_severity": ["Critical", "High"]
+            "blocking_severity": [
+              "Critical",
+              "High"
+            ]
           }
         ]
       },
@@ -82,7 +88,9 @@
       "impeccable_audit": {
         "skill": "opencode-impeccable-audit",
         "fires_when": "diff modifies visual surface of shipping UI",
-        "blocking_severity": ["Red"]
+        "blocking_severity": [
+          "Red"
+        ]
       }
     },
     "finishing": {
@@ -91,12 +99,19 @@
         "mode": "pre-launch",
         "fires_when": "before first production launch, after major DB migration",
         "scope": "full-surface",
-        "blocking_severity": ["Critical", "High"]
+        "blocking_severity": [
+          "Critical",
+          "High"
+        ]
       },
       "branch_close": {
         "skill": "superpowers:finishing-a-development-branch",
         "fires_when": "feature branch ready to merge"
       }
     }
+  },
+  "knowledge_capture": {
+    "enabled": true,
+    "note": "~/Obsidian/Memex/40-49 Resources/44 Agentic Coding Learnings/opencode-workflow.md"
   }
 }

@@ -1,6 +1,6 @@
 ---
 name: agentic-apps-workflow
-version: 0.2.1
+version: 0.3.0
 implements_spec: 0.4.0
 description: |
   Enforces the AgenticApps spec-first workflow on opencode. This skill MUST
@@ -349,3 +349,79 @@ matching the description in the frontmatter.
 The skill stays loaded only during the triggering turn (per opencode's
 progressive-disclosure design); subsequent turns re-trigger when the
 description matches.
+
+---
+
+## Knowledge Capture — Ritual Tail (spec §15)
+
+Transferable learnings must not die in a `.opencode/session-handoff.md` that
+the next session overwrites. This step routes them to a cross-repo memory:
+**one Obsidian note per repo** in the operator's vault. It is the FINAL step of
+three rituals — run it AFTER, never before, the ritual's own artifact exists:
+
+1. **Session handoff** — after `.opencode/session-handoff.md` is written.
+2. **Plan completion** — after a phase plan is authored/marked complete under
+   `.planning/` (`/gsd-plan-phase`).
+3. **Phase completion** — after the phase artifacts are committed
+   (`/gsd-execute-phase`).
+
+The vault write is machine-local: it MUST NEVER be committed to the repo, and
+it MUST NEVER fail, block, or roll back the ritual that triggered it — on any
+failure print one warning line and continue. This mirrors the same section in
+the project `AGENTS.md` (root-down concat); both are the same contract, so a
+session that only reads `AGENTS.md` still performs the capture.
+
+Procedure (mechanical — follow every branch exactly):
+
+1. **Read the config.** Open `.planning/config.json` — the single, shared,
+   host-neutral file (opencode does not namespace it) — and read its
+   `knowledge_capture` object. **Skip** — print at most one line
+   `knowledge-capture: skipped (<reason>)` and continue the ritual — when ANY
+   of these holds:
+   - `.planning/config.json` is absent, or has no `knowledge_capture` key, or
+   - `knowledge_capture.enabled` is `false`, or
+   - the parent folder of `knowledge_capture.note` does not exist (expand a
+     leading `~` against `$HOME` first).
+   NEVER create the parent folder: an absent vault means "not this machine",
+   not "set up the vault".
+2. **Distill 1–5 transferable learnings** from the ritual just completed. A
+   learning qualifies ONLY if it would change how you, another agent, or
+   another host works next time: gotchas whose root cause generalizes; decision
+   rationale with reusable trade-offs; tooling/workflow insights (what made the
+   agent fast or slow); wrong assumptions and what corrected them. Status
+   updates, restatements of the plan, repo facts already in
+   ADRs/handoffs/CHANGELOGs, and filler do NOT qualify. **If nothing clears the
+   bar, write nothing** — no empty entries, no placeholders. A skipped write is
+   conformant; a padded one is not.
+3. **Resolve the note path.** Let `NOTE` = `knowledge_capture.note` with a
+   leading `~` expanded against `$HOME`.
+4. **Create the note on first write.** If `NOTE` does not exist, create it from
+   the skeleton at
+   `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/setup-opencode-agenticapps-workflow/templates/obsidian-learnings-note.md`
+   (fill the `<...>` fields and the dates; `hosts:` starts as `[opencode]`).
+5. **Prepend a Log entry** at the TOP of `## Log` (append-only — NEVER edit or
+   delete existing entries) under a heading of EXACTLY this shape, with
+   `opencode` as the host tag:
+   `### YYYY-MM-DD — <handoff|plan|phase> — <short title> (opencode)`
+   where the second field is the trigger that fired (`handoff`, `plan`, or
+   `phase`), and the learnings as bullets beneath it.
+6. **Curate `## Key Learnings`:** dedupe, merge related items, promote log
+   entries that earned it, demote or remove stale ones. Target ~10–20
+   highest-value items — each a bolded short title plus one to three sentences
+   carrying the transferable insight, not the status.
+7. **Update frontmatter:** set `updated:` to today's date; ensure `opencode`
+   appears in the `hosts:` list (add it, preserving any hosts already listed —
+   e.g. `[claude]` becomes `[claude, opencode]`).
+8. **Report** in one or two lines what was written (or why the step skipped).
+
+Vault safety (hard rules): touch ONLY the configured note — never other repos'
+notes, the folder's `CLAUDE.md`, or anything else in the vault. Never write
+secrets, tokens, URLs with embedded credentials, or client-confidential data;
+redact before writing.
+
+The destination is config-routed (spec §15.2) and the block is host-neutral, so
+a codex or claude host running in the same working tree reads the **same**
+`.planning/config.json → knowledge_capture` and writes to the same per-repo
+note (differentiated only by the `(opencode)` / `(codex)` / `(claude)` host tag
+in the Log heading). See [ADR-0008](../../docs/decisions/0008-knowledge-capture.md)
+and core [ADR-0017](https://github.com/agenticapps-eu/agenticapps-workflow-core/blob/main/adrs/0017-knowledge-capture-obsidian.md).

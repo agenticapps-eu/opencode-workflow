@@ -28,16 +28,13 @@ MODE="check"
 fail=0
 note() { printf '  %s\n' "$*"; }
 
-# The artifacts whose end-state the snapshot must capture, and the
-# authoritative source for each (the dogfooded repo IS the end-state).
-# repo-source                              -> snapshot file
+# The artifacts whose end-state the snapshot must capture: the dogfooded repo
+# IS the end-state. Handled explicitly below (no associative arrays — this guard
+# must run under macOS's stock bash 3.2, which lacks `declare -A`).
 # NOTE: snapshot/docs-decisions-README.md is a FRESH-PROJECT template (a generic,
 # empty ADR index), NOT a mirror of this scaffolder's own docs/decisions/README.md
 # (which lists opencode-workflow's real ADRs). So it is deliberately NOT compared
 # here — a template diverging from the scaffolder's own ADR list is correct.
-declare -A MAP=(
-  [".planning/config.json"]="planning-config.json"
-)
 
 # AGENTS.md block: extract between the marker pair from the repo's own
 # (fully-migrated) AGENTS.md and compare to snapshot/agents-block.md.
@@ -67,10 +64,30 @@ echo "  snapshot: $SNAP"
 extract_block > "$tmp"
 compare "$tmp" "$SNAP/agents-block.md" "AGENTS.md workflow block"
 
-# 2) verbatim end-state files
-for src in "${!MAP[@]}"; do
-  compare "$ROOT/$src" "$SNAP/${MAP[$src]}" "$src"
-done
+# 2) .planning/config.json end-state — compared MODULO the repo-specific,
+# host-neutral `knowledge_capture` block. That block's `note` path carries the
+# resolved repo name (spec §15.2 / ADR-0017), so it is deliberately NOT baked
+# into the generic snapshot: setup seeds it (resolving <repo-name>) and migration
+# 0005 merges it. Everything else ($schema, implements_spec, host, hooks) MUST
+# match. Compared jq-normalized (jq -S) so a merge's reformatting/key-order does
+# not read as drift.
+CFG_SRC="$ROOT/.planning/config.json"
+CFG_SNAP="$SNAP/planning-config.json"
+if [ "$MODE" = "rebuild" ]; then
+  jq 'del(.knowledge_capture)' "$CFG_SRC" > "$CFG_SNAP.tmp" && mv "$CFG_SNAP.tmp" "$CFG_SNAP"
+  note "rebuilt: .planning/config.json (sans knowledge_capture)"
+else
+  csrc="$(mktemp)"; csnap="$(mktemp)"
+  jq -S 'del(.knowledge_capture)' "$CFG_SRC"  > "$csrc"  2>/dev/null
+  jq -S 'del(.knowledge_capture)' "$CFG_SNAP" > "$csnap" 2>/dev/null
+  if diff -q "$csrc" "$csnap" >/dev/null 2>&1; then
+    note "ok: .planning/config.json (modulo knowledge_capture)"
+  else
+    note "DRIFT: .planning/config.json differs (excluding knowledge_capture)"
+    fail=1
+  fi
+  rm -f "$csrc" "$csnap"
+fi
 
 # 3) §11 spec mirror (must match the vendored discipline mirror)
 MIRROR="$ROOT/skills/setup-opencode-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
