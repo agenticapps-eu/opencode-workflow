@@ -8,6 +8,7 @@ applies_to:
   - .planning/config.json                      # implements_spec 0.1.0 -> 0.4.0; restore §13 strengthened_by
   - skills/agentic-apps-workflow/SKILL.md       # scaffolder version bump 0.3.0 -> 0.3.1
   - .opencode/workflow-version.txt              # record new project version
+  - migrations/0002-add-ts-declare-first-skill.md  # scaffolder-only (Step 5): correct dead post-check
 requires: []
 optional_for: []
 ---
@@ -15,7 +16,9 @@ optional_for: []
 # Migration 0006 — Config conformance claim + §13 binding (v0.3.0 -> 0.3.1)
 
 Repairs two defects in `.planning/config.json` that have been present since the
-fork from `codex-workflow` (`50b5d76`) and were never correct in this repo:
+fork from `codex-workflow` (`50b5d76`) and were never correct in this repo, plus
+a third — `0002`'s dead post-check reference (Step 5) — that shares their root
+cause: a scaffolder-side rewrite that never got a migration.
 
 1. **`implements_spec` was left at `0.1.0`.** Migration `0001` is the declared
    sole bumper of the conformance claim, but it bumps only the trigger skill's
@@ -151,6 +154,10 @@ jq -e '(.implements_spec == "0.4.0") and (.hooks.per_task.tdd.strengthened_by !=
 grep -q '^version: 0.3.1$' skills/agentic-apps-workflow/SKILL.md
 grep -q '^implements_spec: 0.4.0$' skills/agentic-apps-workflow/SKILL.md   # unchanged
 grep -q '^0.3.1$' .opencode/workflow-version.txt
+
+# 5. 0002's post-check names a skill that exists (scaffolder repo only)
+! grep -q 'opencode-tdd' migrations/0002-add-ts-declare-first-skill.md
+test -d skills/opencode-ts-declare-first
 ```
 
 - Drift test green: SKILL.md `version` (0.3.1) == latest migration `to_version` (0.3.1)
@@ -184,8 +191,27 @@ grep -q '^0.3.1$' .opencode/workflow-version.txt
   the corrected config, so fresh installs get the fix by construction and
   existing installs get it via this migration.
 
-## Known adjacent defect (not fixed here)
+### Step 5: Correct `0002`'s dead post-check reference
 
-`0002`'s post-check asserts `.hooks.per_task.tdd.skill == "opencode-tdd"`, but
-that skill was removed by the `57df04d` upstream rebind. A fresh replay of the
-chain would fail that check. Out of scope for this patch — tracked separately.
+`0002`'s post-check asserted `.hooks.per_task.tdd.skill == "opencode-tdd"`, but
+that skill was removed by the `57df04d` upstream rebind — which rewrote
+`templates/config-hooks.json` in place **without** shipping a migration. Since
+`0000` Step 2 copies that template, a fresh replay of the chain seeds
+`superpowers:test-driven-development` and then fails `0002`'s own post-check.
+This is documentation-only (a post-check is prose an operator runs, not code the
+engine executes), so it needs no config edit and no idempotency guard.
+
+**Idempotency check:** `! grep -q 'opencode-tdd' migrations/0002-add-ts-declare-first-skill.md`
+**Pre-condition:** none — editing migration prose is inert for an installed project
+**Apply:**
+```bash
+sed -i.0006.bak 's/\.hooks\.per_task\.tdd\.skill == "opencode-tdd"/.hooks.per_task.tdd.skill == "superpowers:test-driven-development"/' \
+  migrations/0002-add-ts-declare-first-skill.md
+rm -f migrations/0002-add-ts-declare-first-skill.md.0006.bak
+```
+**Rollback:** `git checkout -- migrations/0002-add-ts-declare-first-skill.md`
+
+Only the *base* binding moved. The strengthener stays `opencode-ts-declare-first`
+— a host-authored skill that still exists. The synthetic fixtures in
+`run-tests.sh` that encoded `opencode-tdd` are updated in lockstep, so they stop
+asserting a world that no longer exists.

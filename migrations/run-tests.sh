@@ -172,7 +172,7 @@ test_migration_0002() {
 
   # Synthetic config without the §13 binding.
   cat > "$tmp/config.json" <<'JSON'
-{ "hooks": { "per_task": { "tdd": { "skill": "opencode-tdd", "fires_when": "tdd=true", "commit_pair": ["test(RED):","feat(GREEN):"] } } } }
+{ "hooks": { "per_task": { "tdd": { "skill": "superpowers:test-driven-development", "fires_when": "tdd=true", "commit_pair": ["test(RED):","feat(GREEN):"] } } } }
 JSON
 
   assert_check "idempotency: fresh config needs the §13 binding" \
@@ -192,7 +192,7 @@ JSON
     "$tmp" "applied"
 
   # Base tdd binding must be intact (not clobbered).
-  if ( cd "$tmp" && jq -e '.hooks.per_task.tdd.skill == "opencode-tdd"' config.json >/dev/null ); then
+  if ( cd "$tmp" && jq -e '.hooks.per_task.tdd.skill == "superpowers:test-driven-development"' config.json >/dev/null ); then
     echo "  ${GREEN}PASS${RESET} base tdd binding intact after strengthening"
     PASS=$((PASS+1))
   else
@@ -247,7 +247,7 @@ test_migration_0003() {
 
   # Synthetic config without the delegation.
   cat > "$tmp/config.json" <<'JSON'
-{ "hooks": { "per_task": { "tdd": { "skill": "opencode-tdd" } } } }
+{ "hooks": { "per_task": { "tdd": { "skill": "superpowers:test-driven-development" } } } }
 JSON
 
   assert_check "idempotency: fresh config needs the §10 delegation" \
@@ -268,7 +268,7 @@ JSON
     "$tmp" "applied"
 
   # Base hooks must be intact.
-  if ( cd "$tmp" && jq -e '.hooks.per_task.tdd.skill == "opencode-tdd"' config.json >/dev/null ); then
+  if ( cd "$tmp" && jq -e '.hooks.per_task.tdd.skill == "superpowers:test-driven-development"' config.json >/dev/null ); then
     echo "  ${GREEN}PASS${RESET} base hooks intact after delegation record"
     PASS=$((PASS+1))
   else
@@ -409,7 +409,7 @@ test_migration_0005() {
   # present). The merge must add knowledge_capture, resolve <repo-name>, and
   # preserve the pre-existing key.
   cat > "$tmp/config.json" <<'JSON'
-{ "host": "opencode", "hooks": { "per_task": { "tdd": { "skill": "opencode-tdd" } } } }
+{ "host": "opencode", "hooks": { "per_task": { "tdd": { "skill": "superpowers:test-driven-development" } } } }
 JSON
 
   assert_check "idempotency: fresh config needs knowledge_capture" \
@@ -430,7 +430,7 @@ JSON
     FAIL=$((FAIL+1))
   fi
 
-  if ( cd "$tmp" && jq -e '.hooks.per_task.tdd.skill == "opencode-tdd" and .host == "opencode"' config.json >/dev/null ); then
+  if ( cd "$tmp" && jq -e '.hooks.per_task.tdd.skill == "superpowers:test-driven-development" and .host == "opencode"' config.json >/dev/null ); then
     echo "  ${GREEN}PASS${RESET} pre-existing config keys preserved through merge"
     PASS=$((PASS+1))
   else
@@ -550,8 +550,9 @@ test_migration_0006() {
     fi
   done
 
-  # The base tdd binding must not be clobbered by the strengthener (57df04d
-  # rebound it upstream; 0002's own post-check still names the dead opencode-tdd).
+  # The base tdd binding must not be clobbered by the strengthener. 57df04d
+  # rebound it upstream (opencode-tdd -> superpowers:test-driven-development)
+  # without a migration; 0002's post-check was corrected to match in 0006.
   if jq -e '.hooks.per_task.tdd.skill == "superpowers:test-driven-development"' \
        "$snap" >/dev/null 2>&1; then
     echo "  ${GREEN}PASS${RESET} base tdd binding intact (upstream superpowers skill)"
@@ -570,6 +571,27 @@ test_migration_0006() {
     PASS=$((PASS+1))
   else
     echo "  ${RED}FAIL${RESET} snapshot and template diverge — the two seeding paths disagree"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Every opencode-* skill ASSERTED in a migration post-check must exist. This is
+  # what let 0002 keep asserting the deleted opencode-tdd through four releases:
+  # the 57df04d rebind removed the skill without a migration, and nothing checked
+  # that the post-checks still named real things.
+  #
+  # Scoped to post-check bullets (`- \`jq -e ... == "opencode-X"\``) on purpose: a
+  # repair migration must be free to name the corpse in its prose and its sed
+  # (0006 Step 5 does both), and that is not a live assertion.
+  local dead=""
+  for ref in $(grep -rhoE '^- `jq -e .*== "opencode-[a-z0-9-]+"' "$REPO_ROOT"/migrations/*.md 2>/dev/null \
+               | grep -oE 'opencode-[a-z0-9-]+' | sort -u); do
+    [ -d "$REPO_ROOT/skills/$ref" ] || dead="$dead $ref"
+  done
+  if [ -z "$dead" ]; then
+    echo "  ${GREEN}PASS${RESET} every opencode-* skill asserted in a post-check exists"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} post-checks assert non-existent skills:$dead"
     FAIL=$((FAIL+1))
   fi
 }

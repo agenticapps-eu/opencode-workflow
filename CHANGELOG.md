@@ -48,9 +48,16 @@ in every shipped artifact's frontmatter.
   unwired on this host, and the sibling hosts (`claude-workflow`,
   `codex-workflow`) both also cite `0.4.0`. Absorbing 0.5.0–0.7.0 is a
   fleet-wide decision, tracked separately.
-- Known adjacent defect, not fixed here: `0002`'s post-check still asserts
+- **`0002`'s dead post-check corrected (`0006` Step 5).** It asserted
   `.hooks.per_task.tdd.skill == "opencode-tdd"`, a skill removed by the
-  `57df04d` upstream rebind, so a fresh replay of the chain would fail it.
+  `57df04d` upstream rebind — which rewrote `templates/config-hooks.json` in
+  place *without* shipping a migration. Since `0000` Step 2 copies that
+  template, a fresh replay of the chain seeded
+  `superpowers:test-driven-development` and then failed `0002`'s own post-check.
+  Same root cause as the two defects above: a scaffolder-side rewrite with no
+  migration behind it. The `run-tests.sh` fixtures that encoded `opencode-tdd`
+  are updated in lockstep. Documentation-only for installed projects — a
+  post-check is prose an operator runs, not code the engine executes.
 
 ### Changed
 - **Documented the `.planning/phases/` gitignore discipline.** Workflow-testbed

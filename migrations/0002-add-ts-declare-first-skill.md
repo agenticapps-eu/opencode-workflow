@@ -86,9 +86,18 @@ jq 'del(.hooks.per_task.tdd.strengthened_by)' .planning/config.json > "$tmp" && 
 ## Post-checks
 
 - `jq -e '.hooks.per_task.tdd.strengthened_by.skill == "opencode-ts-declare-first"' .planning/config.json` — binding present
-- `jq -e '.hooks.per_task.tdd.skill == "opencode-tdd"' .planning/config.json` — base tdd binding intact (not clobbered)
+- `jq -e '.hooks.per_task.tdd.skill == "superpowers:test-driven-development"' .planning/config.json` — base tdd binding intact (not clobbered)
 - `test -f "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/opencode-ts-declare-first/SKILL.md"` — skill installed
 - Drift test green: trigger SKILL.md `version` (0.2.0) == latest migration `to_version` (0.2.0)
+
+> **Base binding value.** This post-check named `opencode-tdd` until v0.3.1.
+> That skill was removed by the `57df04d` upstream rebind (gates now bind
+> `superpowers:*` rather than re-ported `opencode-*` copies), which rewrote
+> `templates/config-hooks.json` in place **without** shipping a migration. So
+> `0000` Step 2 seeds `superpowers:test-driven-development`, and this check —
+> still asserting the deleted `opencode-tdd` — failed on any fresh replay of the
+> chain. Corrected in `0006`. Only the *base* binding moved; the strengthener
+> above is still the host-authored `opencode-ts-declare-first`, which exists.
 
 ## Skip cases
 
