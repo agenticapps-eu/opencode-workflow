@@ -1,6 +1,6 @@
 {
   "$schema": "https://github.com/agenticapps-eu/opencode-workflow/blob/main/templates/config-hooks.schema.json",
-  "implements_spec": "0.1.0",
+  "implements_spec": "0.4.0",
   "host": "opencode",
   "hooks": {
     "pre_phase": {
@@ -29,7 +29,20 @@
       "tdd": {
         "skill": "superpowers:test-driven-development",
         "fires_when": "task carries tdd=\"true\" marker",
-        "commit_pair": ["test(RED):", "feat(GREEN):"]
+        "commit_pair": [
+          "test(RED):",
+          "feat(GREEN):"
+        ],
+        "strengthened_by": {
+          "skill": "opencode-ts-declare-first",
+          "implements_spec": "0.4.0",
+          "fires_when": "task introduces a new TypeScript module's public API surface in a TS-primary project",
+          "commit_sequence": [
+            "declare(ts):",
+            "test(ts):",
+            "feat(ts):"
+          ]
+        }
       },
       "ui_preview": {
         "skill": "opencode-qa",
@@ -70,7 +83,10 @@
             "skill": "opencode-database-sentinel-audit",
             "mode": "phase-scoped",
             "fires_when": "scope matches supabase|postgres|mongodb|firebase|mysql",
-            "blocking_severity": ["Critical", "High"]
+            "blocking_severity": [
+              "Critical",
+              "High"
+            ]
           }
         ]
       },
@@ -82,7 +98,9 @@
       "impeccable_audit": {
         "skill": "opencode-impeccable-audit",
         "fires_when": "diff modifies visual surface of shipping UI",
-        "blocking_severity": ["Red"]
+        "blocking_severity": [
+          "Red"
+        ]
       }
     },
     "finishing": {
@@ -91,7 +109,10 @@
         "mode": "pre-launch",
         "fires_when": "before first production launch, after major DB migration",
         "scope": "full-surface",
-        "blocking_severity": ["Critical", "High"]
+        "blocking_severity": [
+          "Critical",
+          "High"
+        ]
       },
       "branch_close": {
         "skill": "superpowers:finishing-a-development-branch",

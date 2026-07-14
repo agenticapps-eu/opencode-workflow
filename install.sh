@@ -165,6 +165,43 @@ for d in "$SCAFFOLDER_ROOT"/skills/*/; do
 done
 
 # ─────────────────────────────────────────────────────────────────────────────
+# VERSION: ensure the scaffolder's root VERSION is resolvable next to each
+# skill's snapshot. The setup skill reads .../<skill>/VERSION as the single
+# source of truth for $LATEST, but the repo ships VERSION at its root (one
+# level above the skill dirs), so link/copy it into every skill that has a
+# snapshot/ directory. Idempotent.
+#
+# Symlink mode: $dst is a symlink to the source $d, so writing $dst/VERSION
+#   resolves through into the source tree as a relative ../../VERSION link.
+# Copy mode:    $dst is a real copied dir, so VERSION is copied as a real file.
+# ─────────────────────────────────────────────────────────────────────────────
+VERSION_SRC="$SCAFFOLDER_ROOT/VERSION"
+if [ -f "$VERSION_SRC" ]; then
+  for d in "$SCAFFOLDER_ROOT"/skills/*/; do
+    d="${d%/}"
+    [ -d "$d/snapshot" ] || continue
+    name="$(basename "$d")"
+    dst="$OPENCODE_SKILLS_DIR/$name"
+    # `[ -e ]` follows symlinks, so a dangling copy-mode symlink counts as
+    # missing and gets replaced below. Force flags let a stale link be repointed.
+    if [ -e "$dst/VERSION" ]; then
+      echo "  ${GREEN}OK${RESET}     $name/VERSION (already present)"
+      continue
+    fi
+    if [ "$DRY_RUN" -eq 0 ]; then
+      if [ "$MODE" = "copy" ]; then
+        cp -f "$VERSION_SRC" "$dst/VERSION"
+      else
+        ln -sf "../../VERSION" "$dst/VERSION"
+      fi
+    fi
+    echo "  ${GREEN}VERSION${RESET} $name/VERSION -> $(cat "$VERSION_SRC")"
+  done
+else
+  echo "${YELLOW}warn:${RESET} $VERSION_SRC missing — skill VERSION resolution will fall back to SKILL.md frontmatter."
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Slash commands — so `/setup-agenticapps-workflow` and `/update-…` exist in the
 # TUI. Skills are only reachable via the skill tool / natural language; commands
 # give the familiar `/name` entry point (like GSD's /gsd-*).

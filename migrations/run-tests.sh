@@ -172,7 +172,7 @@ test_migration_0002() {
 
   # Synthetic config without the §13 binding.
   cat > "$tmp/config.json" <<'JSON'
-{ "hooks": { "per_task": { "tdd": { "skill": "opencode-tdd", "fires_when": "tdd=true", "commit_pair": ["test(RED):","feat(GREEN):"] } } } }
+{ "hooks": { "per_task": { "tdd": { "skill": "superpowers:test-driven-development", "fires_when": "tdd=true", "commit_pair": ["test(RED):","feat(GREEN):"] } } } }
 JSON
 
   assert_check "idempotency: fresh config needs the §13 binding" \
@@ -192,7 +192,7 @@ JSON
     "$tmp" "applied"
 
   # Base tdd binding must be intact (not clobbered).
-  if ( cd "$tmp" && jq -e '.hooks.per_task.tdd.skill == "opencode-tdd"' config.json >/dev/null ); then
+  if ( cd "$tmp" && jq -e '.hooks.per_task.tdd.skill == "superpowers:test-driven-development"' config.json >/dev/null ); then
     echo "  ${GREEN}PASS${RESET} base tdd binding intact after strengthening"
     PASS=$((PASS+1))
   else
@@ -247,7 +247,7 @@ test_migration_0003() {
 
   # Synthetic config without the delegation.
   cat > "$tmp/config.json" <<'JSON'
-{ "hooks": { "per_task": { "tdd": { "skill": "opencode-tdd" } } } }
+{ "hooks": { "per_task": { "tdd": { "skill": "superpowers:test-driven-development" } } } }
 JSON
 
   assert_check "idempotency: fresh config needs the §10 delegation" \
@@ -268,7 +268,7 @@ JSON
     "$tmp" "applied"
 
   # Base hooks must be intact.
-  if ( cd "$tmp" && jq -e '.hooks.per_task.tdd.skill == "opencode-tdd"' config.json >/dev/null ); then
+  if ( cd "$tmp" && jq -e '.hooks.per_task.tdd.skill == "superpowers:test-driven-development"' config.json >/dev/null ); then
     echo "  ${GREEN}PASS${RESET} base hooks intact after delegation record"
     PASS=$((PASS+1))
   else
@@ -409,7 +409,7 @@ test_migration_0005() {
   # present). The merge must add knowledge_capture, resolve <repo-name>, and
   # preserve the pre-existing key.
   cat > "$tmp/config.json" <<'JSON'
-{ "host": "opencode", "hooks": { "per_task": { "tdd": { "skill": "opencode-tdd" } } } }
+{ "host": "opencode", "hooks": { "per_task": { "tdd": { "skill": "superpowers:test-driven-development" } } } }
 JSON
 
   assert_check "idempotency: fresh config needs knowledge_capture" \
@@ -430,7 +430,7 @@ JSON
     FAIL=$((FAIL+1))
   fi
 
-  if ( cd "$tmp" && jq -e '.hooks.per_task.tdd.skill == "opencode-tdd" and .host == "opencode"' config.json >/dev/null ); then
+  if ( cd "$tmp" && jq -e '.hooks.per_task.tdd.skill == "superpowers:test-driven-development" and .host == "opencode"' config.json >/dev/null ); then
     echo "  ${GREEN}PASS${RESET} pre-existing config keys preserved through merge"
     PASS=$((PASS+1))
   else
@@ -509,6 +509,94 @@ JSON
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Migration 0006 — config conformance claim + §13 binding.
+#
+# Regression cover for the fork-era defect (present since 50b5d76): the snapshot
+# seeded implements_spec 0.1.0 and lacked 0002's strengthened_by binding, while
+# templates/config-hooks.json carried both. The parity guard could not see it —
+# it compares snapshot against the repo's live config, and both sides were
+# equally wrong. The snapshot-vs-template check below is the one that bites.
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_migration_0006() {
+  echo ""
+  echo "${YELLOW}=== Migration 0006 — config conformance claim + §13 binding ===${RESET}"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "  ${YELLOW}SKIP${RESET} jq not available — conformance-claim test not run"
+    SKIP=$((SKIP+1)); return
+  fi
+
+  local snap="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/snapshot/planning-config.json"
+  local tpl="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/templates/config-hooks.json"
+
+  if [ ! -f "$snap" ] || [ ! -f "$tpl" ]; then
+    echo "  ${RED}FAIL${RESET} snapshot and/or template config missing"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  # The invariant 0006 exists to restore: the claim and the §13 binding move
+  # together. A config claiming 0.4.0 without the binding is a FALSE claim.
+  for f in "$snap" "$tpl" "$REPO_ROOT/.planning/config.json"; do
+    local label; label="$(basename "$(dirname "$f")")/$(basename "$f")"
+    if jq -e '(.implements_spec == "0.4.0")
+              and (.hooks.per_task.tdd.strengthened_by.skill == "opencode-ts-declare-first")' \
+         "$f" >/dev/null 2>&1; then
+      echo "  ${GREEN}PASS${RESET} $label: claim 0.4.0 AND §13 binding present"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} $label: claim/binding invariant broken"
+      FAIL=$((FAIL+1))
+    fi
+  done
+
+  # The base tdd binding must not be clobbered by the strengthener. 57df04d
+  # rebound it upstream (opencode-tdd -> superpowers:test-driven-development)
+  # without a migration; 0002's post-check was corrected to match in 0006.
+  if jq -e '.hooks.per_task.tdd.skill == "superpowers:test-driven-development"' \
+       "$snap" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} base tdd binding intact (upstream superpowers skill)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} base tdd binding clobbered or stale"
+    FAIL=$((FAIL+1))
+  fi
+
+  # The regression test proper: the two seeding paths must agree. Setup Stage C
+  # copies the snapshot; migration 0000 Step 2 copies the template. A project is
+  # entitled to the same config either way.
+  if diff -q <(jq -S 'del(.knowledge_capture)' "$tpl") \
+              <(jq -S 'del(.knowledge_capture)' "$snap") >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} snapshot path == migration path (both seed one config)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} snapshot and template diverge — the two seeding paths disagree"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Every opencode-* skill ASSERTED in a migration post-check must exist. This is
+  # what let 0002 keep asserting the deleted opencode-tdd through four releases:
+  # the 57df04d rebind removed the skill without a migration, and nothing checked
+  # that the post-checks still named real things.
+  #
+  # Scoped to post-check bullets (`- \`jq -e ... == "opencode-X"\``) on purpose: a
+  # repair migration must be free to name the corpse in its prose and its sed
+  # (0006 Step 5 does both), and that is not a live assertion.
+  local dead=""
+  for ref in $(grep -rhoE '^- `jq -e .*== "opencode-[a-z0-9-]+"' "$REPO_ROOT"/migrations/*.md 2>/dev/null \
+               | grep -oE 'opencode-[a-z0-9-]+' | sort -u); do
+    [ -d "$REPO_ROOT/skills/$ref" ] || dead="$dead $ref"
+  done
+  if [ -z "$dead" ]; then
+    echo "  ${GREEN}PASS${RESET} every opencode-* skill asserted in a post-check exists"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} post-checks assert non-existent skills:$dead"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Drift test — the scaffolder's SKILL.md version MUST equal the latest
 # migration's to_version (version is migration-coupled).
 # ─────────────────────────────────────────────────────────────────────────────
@@ -553,6 +641,7 @@ test_repo_layout() {
     migrations/0003-delegate-observability.md \
     migrations/0004-revendor-spec-11.md \
     migrations/0005-knowledge-capture.md \
+    migrations/0006-fix-config-conformance-claim.md \
     skills/setup-opencode-agenticapps-workflow/templates/config-knowledge-capture.json \
     skills/setup-opencode-agenticapps-workflow/templates/obsidian-learnings-note.md \
     docs/decisions/0008-knowledge-capture.md \
@@ -603,6 +692,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0005" ]; then
   test_migration_0005
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0006" ]; then
+  test_migration_0006
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then

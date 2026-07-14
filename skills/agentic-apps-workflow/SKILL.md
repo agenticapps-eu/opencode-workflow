@@ -1,6 +1,6 @@
 ---
 name: agentic-apps-workflow
-version: 0.3.0
+version: 0.3.1
 implements_spec: 0.4.0
 description: |
   Enforces the AgenticApps spec-first workflow on opencode. This skill MUST
