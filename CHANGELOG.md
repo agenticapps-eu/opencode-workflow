@@ -9,6 +9,49 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-07-14
+
+### Fixed
+- **`.planning/config.json` carried a stale conformance claim and was missing
+  the §13 binding (migration `0006`).** Two defects, present since the fork from
+  `codex-workflow` (`50b5d76`) and never correct in this repo:
+  - `implements_spec` sat at `0.1.0`. Migration `0001` is the declared *sole
+    bumper* of the conformance claim, but it bumps only the trigger skill's
+    frontmatter — it never touched the config. Every shipped artifact cited
+    `0.4.0` while the config they ship alongside claimed `0.1.0`.
+  - The §13 `strengthened_by` block binding `opencode-ts-declare-first` to the
+    `tdd` gate was absent. Migration `0002` writes that block and
+    `templates/config-hooks.json` carries it, but the repo's own config — and
+    therefore `snapshot/planning-config.json`, rebuilt from it — never had it.
+
+  **User impact:** opencode ships a snapshot, not a replay (ADR-0007). Setup
+  Stage C step 8 copies `$SNAP/planning-config.json`, describing it as "the
+  **latest** hook config (all migrations already folded in)". That was false, so
+  every project ever scaffolded by `$setup-opencode-agenticapps-workflow`
+  inherited both defects: a stale claim and no declare-first strengthener.
+
+  **Why the guard missed it:** `check-snapshot-parity.sh` compares the snapshot
+  against the repo's *live* config. Both carried the identical defect, so the
+  two agreed and the check passed. The divergence was only visible against
+  `templates/config-hooks.json` — which the migration path (`0000` Step 2)
+  copies, and which has been correct all along. `run-tests.sh` gains a
+  `test_migration_0006` that asserts the two seeding paths agree, closing the
+  blind spot rather than just the instance.
+
+  The claim and the binding are fixed together, never separately: a config
+  claiming `0.4.0` while missing the §13 binding that 0.4.0 requires is a
+  *false* claim — worse than an honestly stale `0.1.0`.
+
+### Notes
+- `implements_spec` stays `0.4.0`; it does **not** move to core spec's current
+  `0.7.0`. §05's `plan-review` gate (0.5.0) and §14 prompt-injection (0.6.0) are
+  unwired on this host, and the sibling hosts (`claude-workflow`,
+  `codex-workflow`) both also cite `0.4.0`. Absorbing 0.5.0–0.7.0 is a
+  fleet-wide decision, tracked separately.
+- Known adjacent defect, not fixed here: `0002`'s post-check still asserts
+  `.hooks.per_task.tdd.skill == "opencode-tdd"`, a skill removed by the
+  `57df04d` upstream rebind, so a fresh replay of the chain would fail it.
+
 ### Changed
 - **Documented the `.planning/phases/` gitignore discipline.** Workflow-testbed
   round-2 benchmark feedback traced a gitignore friction (phase evidence
