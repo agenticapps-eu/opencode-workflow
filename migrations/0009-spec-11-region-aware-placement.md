@@ -101,10 +101,21 @@ what `whichever comes first` encodes.
 | B | §11 present, **inside** a region | move above the region |
 | C | §11 absent | inject at the anchor |
 | D | §11 heading present, **no** provenance comment | refuse, `exit 3` |
+| E | provenance present, **no** terminator line | refuse, `exit 3` |
 
 State D inherits `0001`'s conflict rule verbatim: a heading without provenance
 means the block was hand-pasted outside this migration's management, and is
 refused rather than silently overwritten.
+
+State E is D's class reached by a different route. The strip is bounded by the
+block's terminator; with no terminator that bound does not exist and the strip
+deletes provenance → EOF — region end markers and project content included —
+while every post-check still passes (the re-injected block is fresh, so the
+verbatim check trivially holds, and the "not in a region" check passes *because*
+the end marker was eaten). Reachable two ways: a hand-edit to the block's tail
+that leaves provenance intact, and a future mirror whose closing prose changes —
+`PROV_RE` is deliberately version-agnostic, but the terminator is `@0.4.0`'s
+prose, so any state-B project would take this path. Refuse rather than destroy.
 
 State B is handled rather than deferred because it is reachable *going forward*,
 even though no repo is in it today.
@@ -170,14 +181,40 @@ fi
 # a single remembered start/end: with more than one region, last-wins bounds
 # would report a block inside the FIRST region as "not in a region", skip the
 # heal, and leave it to be eaten — the very defect this migration fixes.
+# An UNTERMINATED region counts as open to EOF: anything after its start marker
+# is inside it. Treating it as no-region would report the file healthy while
+# leaving the block exactly where the next `gitnexus analyze` eats it.
 block_in_region() {
   awk '
     /^<!-- spec-source: agenticapps-workflow-core@[^ ]+ §11 -->$/ { p=NR }
     /^<!-- gitnexus:start -->$/ { rs=NR; open=1 }
     /^<!-- gitnexus:end -->$/   { if (open && p && p > rs && p < NR) inreg=1; open=0 }
-    END { exit !inreg }
+    END { if (open && p && p > rs) inreg=1; exit !inreg }
   ' AGENTS.md
 }
+
+# The strip below is bounded by the block's terminator line. If a block carries
+# provenance but no terminator, that bound does not exist and the strip would
+# delete provenance -> EOF, silently destroying the rest of the file (region end
+# markers and project content included) while every post-check still passed.
+# Fail closed instead: this is state D's class — a block outside this
+# migration's management, which it must never silently overwrite.
+if grep -qE "$PROV_RE" AGENTS.md && ! awk '
+    /^<!-- spec-source: agenticapps-workflow-core@[^ ]+ §11 -->$/ { f=1; next }
+    f && /session-level discipline the model brings to every diff\.$/ { found=1; exit }
+    END { exit !found }
+  ' AGENTS.md; then
+  echo "ABORT: AGENTS.md has a §11 provenance comment but no recognisable end to"
+  echo "       the managed block (expected a line ending 'session-level discipline"
+  echo "       the model brings to every diff.'). The block was edited by hand, or"
+  echo "       the mirror's closing prose changed. Refusing to strip: without that"
+  echo "       boundary this would delete everything from the provenance line to"
+  echo "       the end of the file."
+  echo ""
+  echo "  Resolve by hand, then re-run: restore the block's closing line, or"
+  echo "  delete the block (and its provenance comment) so it is re-injected."
+  exit 3
+fi
 
 # Idempotency: skip iff provenance is present AND the block is not in a region.
 # State A is a no-op; state B re-runs so the block can be lifted out.
@@ -288,13 +325,21 @@ placement, not a conformance claim.)
 # 1. §11 is present under provenance
 grep -qE '<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->' AGENTS.md
 
-# 2. §11 is NOT inside ANY GitNexus region (the whole point of this migration)
+# 2. §11 is NOT inside ANY GitNexus region (the whole point of this migration).
+# An unterminated region counts as open to EOF — otherwise eating the end marker
+# would make this check pass *because* the file was damaged.
 awk '
   /^<!-- spec-source: agenticapps-workflow-core@[^ ]+ §11 -->$/ { p=NR }
   /^<!-- gitnexus:start -->$/ { rs=NR; open=1 }
   /^<!-- gitnexus:end -->$/   { if (open && p && p > rs && p < NR) inreg=1; open=0 }
-  END { if (inreg) { print "FAIL: §11 is inside a GitNexus region"; exit 1 } }
+  END { if (open && p && p > rs) inreg=1
+        if (inreg) { print "FAIL: §11 is inside a GitNexus region"; exit 1 } }
 ' AGENTS.md
+
+# 2b. Region markers are balanced — a strip that ran past its bound would eat an
+# end marker, and check 2 would then pass on the wreckage.
+test "$(grep -c '^<!-- gitnexus:start -->$' AGENTS.md)" \
+   = "$(grep -c '^<!-- gitnexus:end -->$' AGENTS.md)"
 
 # 3. The block is byte-identical to the mirror (Step 1 verbatim assertion)
 # 4. Exactly one managed block
@@ -326,4 +371,13 @@ loudly instead of degrading into vacuously-passing fixtures.
 | 05 unmanaged conflict | state D → `exit 3`, file untouched |
 | 06 no heading/region | no `## `, no region → EOF append |
 | 07 two regions | §11 inside the **first** of two regions → lifted out (pins the region predicate against last-wins bounds) |
+| 08 no terminator | state E → `exit 3`, file untouched (pins the strip's bound; without it the heal deletes provenance → EOF) |
+| 09 unterminated region | §11 after an unclosed `gitnexus:start` → lifted above it, not reported healthy |
 | self-conformance | this repo's own §11 sits above its own region |
+
+Fixtures 01/02/07 additionally assert that **non-§11 content is preserved
+byte-for-byte**, and 01/02 that the injected block is **byte-identical to the
+mirror**. Placement assertions alone cannot see data loss — a strip that ran to
+EOF still yields a correctly-placed, singular block — and §11 is canonical prose,
+so a paraphrasing injector must fail. Both assertions were verified to kill
+mutants that otherwise passed the whole suite.

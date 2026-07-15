@@ -872,10 +872,48 @@ test_migration_0009() {
   }
   lineno() { grep -n "$1" "$2" 2>/dev/null | head -1 | cut -d: -f1; }
 
+  # Everything that is NOT the managed §11 block must survive a heal untouched.
+  # Placement assertions alone cannot see data loss: a strip that ran to EOF
+  # still yields a correctly-placed, singular block — and passes 02/07 while the
+  # rest of the file is gone.
+  strip11() { # $1 file -> stdout, §11 block removed
+    awk '
+      /^<!-- spec-source: agenticapps-workflow-core@[^ ]+ §11 -->$/ {inblk=1; next}
+      inblk && /session-level discipline the model brings to every diff\.$/ {inblk=0; skipblank=1; next}
+      inblk {next}
+      skipblank && /^$/ {skipblank=0; next}
+      {skipblank=0; print}
+    ' "$1"
+  }
+  assert_preserved() { # $1 before  $2 after  $3 label
+    if diff -q <(strip11 "$1") <(strip11 "$2") >/dev/null 2>&1; then
+      echo "  ${GREEN}PASS${RESET} $3: non-§11 content preserved byte-for-byte"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} $3: the heal destroyed non-§11 content"
+      diff <(strip11 "$1") <(strip11 "$2") | head -4
+      FAIL=$((FAIL+1))
+    fi
+  }
+  # §11 is canonical prose (a spec MUST). 0001's suite diffs the injected block
+  # against the mirror; 0009 rewrote the injector, so it must carry that net too
+  # — otherwise a paraphrasing injector passes every placement assertion.
+  assert_verbatim() { # $1 healed-file  $2 label
+    if awk '/^## Coding Discipline \(NON-NEGOTIABLE\)$/{f=1} f{print} /session-level discipline the model brings to every diff\.$/{exit}' "$1" \
+         | diff -q - "$mirror" >/dev/null 2>&1; then
+      echo "  ${GREEN}PASS${RESET} $2: injected block byte-identical to the mirror"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} $2: injected block is NOT byte-identical to the mirror"
+      FAIL=$((FAIL+1))
+    fi
+  }
+
   # ── Fixture 01 — gitnexus-led file, §11 absent (state C) ──────────────────
   # The regression shape: first '## ' is INSIDE the region.
   local w="$tmp/01"; mkdir -p "$w"
   printf '# AGENTS.md — demo\n\n<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n## Always Do\n\n- use the graph\n<!-- gitnexus:end -->\n\n## Project Notes\n\nbody\n' > "$w/AGENTS.md"
+  cp "$w/AGENTS.md" "$w/before.md"
   local rc01; rc01="$(run_step1 "$w")"
   local p rs
   p="$(lineno 'spec-source' "$w/AGENTS.md")"; rs="$(lineno 'gitnexus:start' "$w/AGENTS.md")"
@@ -889,6 +927,8 @@ test_migration_0009() {
     echo "  ${RED}FAIL${RESET} 01 gitnexus-led: §11 at L${p:-none}, region starts L${rs:-none}, rc=$rc01"
     FAIL=$((FAIL+1))
   fi
+  assert_preserved "$w/before.md" "$w/AGENTS.md" "01 gitnexus-led"
+  assert_verbatim "$w/AGENTS.md" "01 gitnexus-led"
 
   # …and it must survive the region being regenerated (what `gitnexus analyze` does).
   awk '/^<!-- gitnexus:start -->$/{print; print "# GitNexus — regenerated"; skip=1; next}
@@ -910,6 +950,7 @@ test_migration_0009() {
     cat "$mirror"
     printf '\n## Always Do\n\n- stuff\n<!-- gitnexus:end -->\n\n## Project Notes\n\nbody\n'
   } > "$w/AGENTS.md"
+  cp "$w/AGENTS.md" "$w/before.md"
   local rc02; rc02="$(run_step1 "$w")"
   p="$(lineno 'spec-source' "$w/AGENTS.md")"; rs="$(lineno 'gitnexus:start' "$w/AGENTS.md")"
   local n; n="$(grep -c 'spec-source' "$w/AGENTS.md")"
@@ -920,6 +961,8 @@ test_migration_0009() {
     echo "  ${RED}FAIL${RESET} 02 inside-region: §11 L${p:-none} vs region L${rs:-none}, count=$n, rc=$rc02"
     FAIL=$((FAIL+1))
   fi
+  assert_preserved "$w/before.md" "$w/AGENTS.md" "02 inside-region"
+  assert_verbatim "$w/AGENTS.md" "02 inside-region"
 
   # ── Fixture 03 — healthy file (state A) → byte-identical, zero churn ──────
   # Uses this repo's REAL AGENTS.md: the strongest available no-op evidence.
@@ -982,6 +1025,7 @@ test_migration_0009() {
     printf '\n## Always Do\n\n- stuff\n<!-- gitnexus:end -->\n\n## Notes\n\n'
     printf '<!-- gitnexus:start -->\n# GitNexus B\n<!-- gitnexus:end -->\n'
   } > "$w/AGENTS.md"
+  cp "$w/AGENTS.md" "$w/before.md"
   local rc07; rc07="$(run_step1 "$w")"
   p="$(lineno 'spec-source' "$w/AGENTS.md")"; rs="$(lineno 'gitnexus:start' "$w/AGENTS.md")"
   n="$(grep -c 'spec-source' "$w/AGENTS.md")"
@@ -990,6 +1034,49 @@ test_migration_0009() {
     PASS=$((PASS+1))
   else
     echo "  ${RED}FAIL${RESET} 07 two regions: §11 L${p:-none} vs first region L${rs:-none}, count=$n, rc=$rc07"
+    FAIL=$((FAIL+1))
+  fi
+  assert_preserved "$w/before.md" "$w/AGENTS.md" "07 two regions"
+
+  # ── Fixture 08 — provenance but NO terminator (state E) → exit 3 ──────────
+  # The strip is bounded by the terminator line. Without it the strip would run
+  # to EOF, deleting region end markers and project content — and every
+  # post-check would still pass on the wreckage. Must refuse, not destroy.
+  w="$tmp/08"; mkdir -p "$w"
+  {
+    printf '# AGENTS.md — demo\n\n<!-- gitnexus:start -->\n# GitNexus\n\n'
+    printf '<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->\n'
+    printf '## Coding Discipline (NON-NEGOTIABLE)\n\ntail trimmed by hand\n'
+    printf '\n## Always Do\n\n- graph\n<!-- gitnexus:end -->\n\n## Project Notes\n\nKEEP ME\n'
+  } > "$w/AGENTS.md"
+  cp "$w/AGENTS.md" "$w/before.md"
+  local rc08; rc08="$(run_step1 "$w")"
+  if [ "$rc08" = "3" ] && diff -q "$w/before.md" "$w/AGENTS.md" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} 08 no terminator: refused with exit 3, file untouched"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 08 no terminator: rc=$rc08 (want 3) or file was modified — DATA LOSS"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Fixture 09 — unterminated region (no end marker) ──────────────────────
+  # An open region runs to EOF, so a block after its start marker IS inside it.
+  # Reporting "correctly placed" here is a false success that leaves the block
+  # exactly where the next `gitnexus analyze` eats it.
+  w="$tmp/09"; mkdir -p "$w"
+  {
+    printf '# AGENTS.md — demo\n\n<!-- gitnexus:start -->\n# GitNexus\n\n'
+    printf '<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->\n'
+    cat "$mirror"
+    printf '\n'
+  } > "$w/AGENTS.md"
+  local rc09; rc09="$(run_step1 "$w")"
+  p="$(lineno 'spec-source' "$w/AGENTS.md")"; rs="$(lineno 'gitnexus:start' "$w/AGENTS.md")"
+  if [ "$rc09" = "0" ] && [ -n "$p" ] && [ -n "$rs" ] && [ "$p" -lt "$rs" ]; then
+    echo "  ${GREEN}PASS${RESET} 09 unterminated region: §11 lifted above the open region (L$p < L$rs)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 09 unterminated region: §11 L${p:-none} vs region L${rs:-none}, rc=$rc09 — left inside an open region"
     FAIL=$((FAIL+1))
   fi
 

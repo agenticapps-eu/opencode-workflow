@@ -80,13 +80,30 @@ in every shipped artifact's frontmatter.
   convention, its shell is extracted positionally via `extract_fence_after`.
 
   The region predicate closes each region as its end marker is reached rather
-  than comparing against a single remembered start/end. With more than one
-  region, last-wins bounds report a block inside the *first* region as "not in a
-  region", skip the heal, and leave it to be eaten — the very defect this
-  migration fixes. Fixture 07 pins it.
+  than comparing against a single remembered start/end, and treats an
+  unterminated region as open to EOF. Last-wins bounds report a block inside the
+  *first* of two regions as "not in a region"; ignoring open regions reports a
+  block inside one as healthy. Both skip the heal and leave the block to be
+  eaten — the very defect this migration fixes. Fixtures 07 and 09 pin them.
 
-  Suite: 84 PASS → **95 PASS / 0 FAIL / 1 SKIP**. Parity green. Stamps aligned at
-  0.5.0. `implements_spec: 0.9.1` deliberately untouched — `0009` fixes
+  `0009` also refuses (`exit 3`, state E) when a block carries provenance but no
+  terminator line. The strip is bounded by that terminator; without it the heal
+  deleted everything from the provenance line to EOF — region end markers and
+  project content included — silently, at `rc=0`, with **every post-check still
+  passing** (the re-injected block is fresh, so the verbatim check trivially
+  holds, and "not in a region" passes *because* the end marker was eaten).
+  Reachable by a hand-edit to the block's tail, or by a future mirror whose
+  closing prose changes, since `PROV_RE` is version-agnostic while the terminator
+  is `@0.4.0`'s prose. Fixture 08 pins the refusal.
+
+  Fixtures 01/02/07 assert non-§11 content is preserved byte-for-byte, and 01/02
+  that the injected block is byte-identical to the mirror. Placement assertions
+  cannot see data loss — a strip that ran to EOF still yields a correctly-placed,
+  singular block — and §11 is canonical prose, so a paraphrasing injector must
+  fail. Both were verified to kill mutants that otherwise passed the whole suite.
+
+  Suite: 84 PASS → **102 PASS / 0 FAIL / 1 SKIP**. Parity green. Stamps aligned
+  at 0.5.0. `implements_spec: 0.9.1` deliberately untouched — `0009` fixes
   placement, not a conformance claim.
 
 ## [0.4.1] — 2026-07-15

@@ -103,10 +103,24 @@ blast radius for a latent defect.
   loss on the next `gitnexus analyze`.
 - Six healthy fleet files take a version-stamp bump and no content change.
 - The "is the block in a region" predicate closes each region as its end marker
-  is reached rather than comparing against a single remembered start/end. With
-  more than one region, last-wins bounds report a block inside the *first* region
-  as "not in a region" — skipping the heal and leaving it to be eaten, which is
-  the defect this ADR exists to prevent.
+  is reached rather than comparing against a single remembered start/end, and
+  treats an unterminated region as open to EOF. Last-wins bounds report a block
+  inside the *first* of two regions as "not in a region"; ignoring open regions
+  reports a block inside one as healthy. Both skip the heal and leave the block
+  to be eaten, which is the defect this ADR exists to prevent.
+- **The heal fails closed when the block has no terminator (state E).** The strip
+  is bounded by the block's closing line; with no such line it deleted
+  provenance → EOF — region end markers and project content included — at `rc=0`
+  with every post-check passing. A migration that silently destroys project
+  content is strictly worse than the latent defect it repairs, so this refuses
+  rather than guesses. It is state D's class by another route: a block outside
+  this migration's management.
+- **Fixtures assert preservation and canonicity, not just placement.** A strip
+  that ran to EOF still leaves a correctly-placed, singular block, so placement
+  assertions pass on total data loss; and §11 is canonical prose, so a
+  paraphrasing injector must fail. Both assertions were verified to kill mutants
+  that otherwise passed the entire suite. Asserting the *observable outcome*
+  rather than the mechanism is what makes these fixtures load-bearing.
 - Fixtures **extract and execute** the migration's own shell via `# step1:begin`
   / `# step1:end` sentinels (inert comments in both bash and awk) rather than
   copying it. The prior fixture inlined a copy of `0001`'s awk — a copy tests the
