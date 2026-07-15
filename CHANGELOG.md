@@ -9,6 +9,53 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-07-15
+
+### Fixed
+- **The `plan-review` binding named a skill that does not exist (migration
+  `0008`).** `0007` bound the gate as `"skill": "gsd-review"`. There is no
+  `gsd-review` under `skills/` — upstream gsd-opencode ships it as a slash
+  **command**, `commands/gsd/gsd-review.md` (verified against
+  `gsd-opencode@1.38.5`: its `skills/` ships `gsd-code-review` and
+  `gsd-ui-review`, no `gsd-review`).
+
+  The gate resolved either way — the command exists and `/gsd-review` is how it
+  is invoked — so nothing was broken. But a binding table exists to tell a
+  reader where to find the bound thing (spec/09 item 3: *"the host MUST document
+  the bound skill (or plugin, or tool)"*). Labelled as a skill, a reader greps
+  `skills/`, finds nothing, and concludes the binding is dead. That is not
+  hypothetical: it happened to the agent that wrote `0007`, against its own
+  freshly-merged code, within the hour.
+
+  It was also inconsistent with this host's own conventions — the trigger's Step
+  2 routing already writes every GSD entry point in slash form
+  (`/gsd-discuss-phase`, `/gsd-plan-phase`, `/gsd-execute-phase`), since `$name`
+  is the *skill* idiom and `/name` is the *command* idiom. Only this binding used
+  the bare form. Now matches the reference host, whose identical binding reads
+  `"skill": "/gsd-review (slash command from …)"`.
+
+  `run-tests.sh` gains `test_migration_0008`, which asserts the slash form on all
+  three seeding surfaces **and** the general rule — no binding may name a bare
+  `gsd-*` as though it were a skill. Verified to fail against `0007`'s label.
+
+- **`test_migration_0007` was pinning a literal**, the same brittleness `0006`'s
+  test had. It asserted `plan_review.skill == "gsd-review"` exactly, so `0008`'s
+  re-label would have broken it. Rewritten to assert what the binding *resolves
+  to*; it now passes across both labels while still catching a missing or
+  incomplete gate.
+
+### Notes
+- `implements_spec` is **unchanged at `0.9.1`** — this corrects what a binding
+  *says*, not what the host conforms to. §02 asks the host bind a multi-AI
+  plan-review skill and document it; the binding existed and resolved before
+  this migration. The documentation is now true; the conformance never moved.
+- `0007` is amended by a **new migration rather than edited in place**: it
+  shipped, and the binding value is real state in an installed project's
+  `.planning/config.json` (not inert prose), so a project that already ran `0007`
+  needs an upgrade path. Same discipline `0006` applied to `0001`. Contrast
+  `0006` Step 5, which *did* edit `0002` directly — a post-check is prose an
+  operator runs, inert for installed projects.
+
 ## [0.4.0] — 2026-07-15
 
 ### Added

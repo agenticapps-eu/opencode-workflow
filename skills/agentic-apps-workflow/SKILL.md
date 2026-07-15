@@ -1,6 +1,6 @@
 ---
 name: agentic-apps-workflow
-version: 0.4.0
+version: 0.4.1
 implements_spec: 0.9.1
 description: |
   Enforces the AgenticApps spec-first workflow on opencode. This skill MUST
@@ -151,7 +151,7 @@ binding contract for `full` conformance per spec/09.
 
 | Gate | Bound skill | Notes |
 |---|---|---|
-| `plan-review` | `gsd-review` | Fires once a phase has one or more `*-PLAN.md`, before the first code-touching execution edit. Evidence is `{phase}-REVIEWS.md` carrying independent review from **at least two external AI reviewers** — adversarial review of the plan before any code exists. Per spec §02 the gate resolves the active phase in this order: explicit phase pointer → workflow state (`current_phase`) → newest plan artifact by mtime → fail-open (allow); a single mutable pointer alone is non-conformant (core ADR-0025). It **grandfathers** already-executed phases: when a `*-SUMMARY.md` exists for the resolved phase the edit is allowed, so enabling the gate never retroactively blocks work shipped before it functioned. |
+| `plan-review` | **`/gsd-review`** — a slash **command** from upstream gsd-opencode (`commands/gsd/gsd-review.md`), not a skill: there is no `gsd-review` under `skills/`, so do not go looking for one | Fires once a phase has one or more `*-PLAN.md`, before the first code-touching execution edit. Evidence is `{phase}-REVIEWS.md` carrying independent review from **at least two external AI reviewers** — adversarial review of the plan before any code exists. Per spec §02 the gate resolves the active phase in this order: explicit phase pointer → workflow state (`current_phase`) → newest plan artifact by mtime → fail-open (allow); a single mutable pointer alone is non-conformant (core ADR-0025). It **grandfathers** already-executed phases: when a `*-SUMMARY.md` exists for the resolved phase the edit is allowed, so enabling the gate never retroactively blocks work shipped before it functioned. |
 
 ### Per-task / execution
 
