@@ -113,18 +113,37 @@ test_migration_0001() {
     FAIL=$((FAIL+1))
   fi
 
-  # Injection byte-identity: applying Step 1's awk to fixture A must produce a
-  # §11 block byte-identical to the mirror.
-  awk -v mirror="$mirror" '
-    /^## / && !done {
-      print "<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->"
-      while ((getline line < mirror) > 0) print line
-      close(mirror); print ""; done=1
-    }
-    { print }
-  ' "$tmp/a-AGENTS.md" > "$tmp/a-injected.md"
+  # Injection byte-identity: applying Step 1's REAL shell to fixture A must
+  # produce a §11 block byte-identical to the mirror.
+  #
+  # This used to inline a copy of 0001's awk. A copy tests the copy — it stays
+  # green while the migration drifts underneath it. 0001 is immutable and so
+  # cannot be retrofitted with the `# step1:begin` sentinels 0009 uses, so its
+  # shell is extracted positionally instead (see extract_fence_after).
+  local step1_0001="$tmp/0001-step1.sh"
+  extract_fence_after "$REPO_ROOT/migrations/0001-inject-spec-11-coding-discipline.md" \
+    'Step 1: Inject the §11 canonical block into AGENTS.md' "$step1_0001"
+
+  # Shape assertion — a mis-extraction must fail loudly, not vacuously pass.
+  if [ -s "$step1_0001" ] \
+     && grep -q 'MIRROR=' "$step1_0001" \
+     && grep -q 'awk -v mirror=' "$step1_0001" \
+     && grep -q 'AGENTS.md' "$step1_0001" \
+     && ! grep -q '```' "$step1_0001"; then
+    echo "  ${GREEN}PASS${RESET} extractor locked onto 0001's Step 1 shell (shape ok)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} extractor did NOT lock onto 0001's Step 1 shell"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  local w0001="$tmp/0001-run"; mkdir -p "$w0001"
+  cp "$tmp/a-AGENTS.md" "$w0001/AGENTS.md"
+  local cfg0001="$tmp/0001-cfg/skills/setup-opencode-agenticapps-workflow/templates/spec-mirrors"
+  mkdir -p "$cfg0001"; cp "$mirror" "$cfg0001/11-coding-discipline-0.4.0.md"
+  ( cd "$w0001" && OPENCODE_CONFIG_DIR="$tmp/0001-cfg" bash "$step1_0001" >/dev/null 2>&1 )
   awk '/^## Coding Discipline \(NON-NEGOTIABLE\)$/{f=1} f{print} /session-level discipline the model brings to every diff\.$/{exit}' \
-    "$tmp/a-injected.md" > "$tmp/a-block.md"
+    "$w0001/AGENTS.md" > "$tmp/a-block.md"
   if diff -q "$tmp/a-block.md" "$mirror" >/dev/null 2>&1; then
     echo "  ${GREEN}PASS${RESET} injected §11 block is byte-identical to the mirror"
     PASS=$((PASS+1))
@@ -776,11 +795,26 @@ test_migration_0008() {
 # Extract a sentinel-delimited region from a migration document.
 # Sentinels are `# name:begin` / `# name:end` — inert comments in both bash and
 # awk, so they live inside the migration's real shell without altering it.
+# Preferred for migrations written after 0009.
 extract_region() { # $1 doc  $2 sentinel-name  $3 out-file
   awk -v b="# $2:begin" -v e="# $2:end" '
     index($0, b) { f=1; next }
     index($0, e) { f=0 }
     f { print }
+  ' "$1" > "$3"
+}
+
+# Extract the first ```bash fenced block following an anchor line.
+# For migrations that predate the sentinel convention and are immutable, so
+# cannot be retrofitted with sentinels (0001, 0004). Positional and therefore
+# more brittle than extract_region — every caller MUST pair it with a shape
+# assertion so a mis-lock fails loudly rather than passing vacuously.
+extract_fence_after() { # $1 doc  $2 anchor-substring  $3 out-file
+  awk -v anchor="$2" '
+    !seen && index($0, anchor) { seen=1; next }
+    seen && !inf && /^```bash$/ { inf=1; next }
+    inf && /^```$/ { exit }
+    inf { print }
   ' "$1" > "$3"
 }
 
