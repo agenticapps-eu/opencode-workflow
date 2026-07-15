@@ -37,11 +37,19 @@ in every shipped artifact's frontmatter.
   written: with any existing block stripped it re-derives the block's current
   position exactly in all six real fleet `AGENTS.md` files — zero churn.
 
-  **This host's defect was LATENT, not live.** A fleet scan on 2026-07-15 found
-  0/6 files affected — each has project `## ` headings above its region. Unlike
-  the reference host, there was no broken repo to repair; this prevents the
-  defect in projects scaffolded going forward. Healthy repos take a version-stamp
-  bump and no content change.
+  **This host's defect was LATENT, not live** — 0 of 4 opencode-scaffolded
+  `AGENTS.md` files have a block inside a region, so there was no broken repo to
+  repair, unlike the reference host.
+
+  *(Corrected post-merge: the scan shipped with `0009` said "0/6 … each has
+  project `## ` headings above its region". It covered only the `agenticapps/`
+  family and counted `codex-*` hosts this scaffolder does not install. The
+  conclusion held; the reason did not. **`factiv/cparx` is genuinely
+  region-led** — region L1–43, first `## ` = `## Always Do` at L8 inside it — and
+  is safe only because its §11 landed below the region. It is the repo `0009`
+  exists for: the naive anchor puts §11 at L8 inside the region, the new rule at
+  L1 above it. `cparx` applied `0009` on 2026-07-15 and took the designed state-A
+  no-op — §11 left at L45, only the stamp moved.)*
 
   Migration `0009` heals four states: correctly-anchored (no-op),
   inside-a-region (move above it), absent (inject at the anchor), and
@@ -51,9 +59,12 @@ in every shipped artifact's frontmatter.
 
   Rejected: *"anchor before `gitnexus:start` if a region exists, else the first
   `## `"* — the obvious reading of "put it above the region", and wrong. Measured
-  against the real `codex-workflow/AGENTS.md` (region at L271), §11 would move
-  from L17 to **L190**, violating §12's placement advisory. The region is only
-  the anchor when it comes *first*. See ADR-0009.
+  against this repo's own `AGENTS.md` (region at L240), §11 would move from L17
+  to **L159**, violating §12's placement advisory. The region is only the anchor
+  when it comes *first* — which is why `cparx` (region at L1) and this repo
+  (region at L240) both land correctly under one rule. See ADR-0009. (Originally
+  measured against `codex-workflow/AGENTS.md` — a real file, but a codex host;
+  re-measured in-fleet, conclusion unchanged.)
 
 ### Changed
 - **The setup path's placement prose is region-aware.** Step 9 said "insert (at

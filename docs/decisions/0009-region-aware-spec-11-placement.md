@@ -25,10 +25,21 @@ Recovery is closed. `update` marks a migration pending iff
 past and never replay, and their pre-flight version gates also abort the
 `--migration NNNN` force path. Once eaten, the block needs a hand-paste.
 
-A fleet scan on 2026-07-15 found **0 of 6** real `AGENTS.md` files affected —
-every one has project `## ` headings above its region. The defect is **latent
-here**, unlike `claude-workflow`, which had a live broken repo. This decision is
-about projects scaffolded going forward.
+A fleet scan on 2026-07-15 found **0 of 4** opencode-scaffolded `AGENTS.md` files
+affected — no block is currently inside a region. The defect is **latent here**,
+unlike `claude-workflow`, which had a live broken repo.
+
+It is not, however, latent because every file has project `## ` headings above
+its region — the reason this ADR originally gave. **`factiv/cparx` is genuinely
+region-led**: region L1–43, first `## ` = `## Always Do` at **L8, inside it**. It
+is safe only because its §11 landed *below* the region. Measured against its real
+`AGENTS.md`, the naive anchor places §11 at L8 — inside the region — while this
+decision's rule places it at L1, above. `cparx` is the repo this decision exists
+for, and any future state-C re-inject there hits exactly that.
+
+(The original scan covered only the `agenticapps/` family and counted `codex-*`
+hosts this scaffolder does not install. Corrected 2026-07-15; the conclusion
+survived, the stated reason did not.)
 
 ## Decision
 
@@ -54,11 +65,17 @@ nor a region, it falls to EOF.
 
 ### "Before `gitnexus:start` if a region exists, else the first `## `"
 
-The obvious reading of "put it above the region", and wrong. Measured against the
-real `codex-workflow/AGENTS.md`, whose region starts at L271: §11 would move from
-L17 to **L190**, violating §12's placement advisory ("near the top", "not below
-long appendices"). The region is only the anchor when it comes *first* — which is
-what `whichever comes first` encodes. Rejected on measurement, not on argument.
+The obvious reading of "put it above the region", and wrong. Measured against
+this repo's own `AGENTS.md`, whose region starts at L240: §11 would move from L17
+to **L159**, violating §12's placement advisory ("near the top", "not below long
+appendices"). The region is only the anchor when it comes *first* — which is what
+`whichever comes first` encodes, and which is why `cparx` (region at L1) and this
+repo (region at L240) both land correctly under a single rule. Rejected on
+measurement, not on argument.
+
+(Originally measured against `codex-workflow/AGENTS.md` — a real file with a late
+region, but a **codex** host, not one this scaffolder installs. Re-measured
+in-fleet; conclusion unchanged.)
 
 ### "Always immediately after the H1"
 

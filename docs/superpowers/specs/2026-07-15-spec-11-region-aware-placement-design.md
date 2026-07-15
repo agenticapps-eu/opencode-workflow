@@ -50,7 +50,7 @@ The third site was not in the propagation brief. It is a fixture that inlines a
 copy of the awk rather than extracting it from the migration, so it tests the
 copy and the two can drift silently.
 
-### Fleet scan (2026-07-15)
+### Fleet scan (2026-07-15) — SUPERSEDED, see correction below
 
 | File | §11 | Region | State |
 |---|---|---|---|
@@ -66,6 +66,46 @@ project `## ` headings above its region. Unlike `claude-workflow` — which had 
 live broken repo (`agenticapps-dashboard`, missing §11 entirely) — there is no
 repo to repair. This is a placement fix for projects scaffolded going forward,
 plus self-protection.
+
+### Fleet scan — CORRECTED (2026-07-15, post-merge)
+
+The scan above is wrong twice, and the table is kept only to show what was
+believed at design time.
+
+1. **It covered one family.** It globbed `~/Sourcecode/agenticapps/*/AGENTS.md`,
+   honouring the family-isolation rule in `~/Sourcecode/CLAUDE.md`. But this
+   scaffolder installs projects in *other* families, and they were invisible to
+   it.
+2. **It counted the wrong hosts.** `codex-workflow`, `bench-codex` and
+   `workflow-testbed-codex` are **codex**-scaffolded. The opencode fleet is
+   defined by `.opencode/workflow-version.txt`, not by "has an AGENTS.md with
+   §11".
+
+The real fleet:
+
+| Project | §11 | Region | Region-led? | Shape |
+|---|---|---|---|---|
+| `factiv/cparx` | L45 | L1–43 | **YES** | §11 **below** the region — outside it |
+| `agenticapps/opencode-workflow` | L17 | L240–282 | no | project headings lead |
+| `agenticapps/bench-opencode` | L5 | none | no | no region |
+| `agenticapps/workflow-testbed` | L5 | none | no | no region |
+
+**0 of 4 affected** — the "latent, not live" conclusion survives. The *reason*
+does not: `cparx` is genuinely region-led (first `## ` = `## Always Do` at L8,
+inside the region), and is safe only because its §11 sits below the region.
+
+This strengthens the case for the migration rather than weakening it. Measured
+against `cparx`'s real `AGENTS.md`: the naive anchor places §11 at **L8, inside
+the region**; the chosen rule places it at **L1**, above. Any future state-C
+re-inject there hits exactly that.
+
+`cparx` applied `0009` on 2026-07-15 and took the designed path — state A no-op,
+§11 left at L45, only the version stamp moved. Live confirmation of the
+no-gratuitous-churn guarantee that fixture 11 pins.
+
+Recorded rather than quietly patched, per the same discipline as `0006`/`0008`:
+the conclusion was right, the evidence behind it was not, and a claim is only
+worth what its evidence is.
 
 ## Design
 
