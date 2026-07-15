@@ -970,6 +970,29 @@ test_migration_0009() {
     FAIL=$((FAIL+1))
   fi
 
+  # ── Fixture 07 — §11 inside the FIRST of two regions (state B, multi) ─────
+  # Guards the region predicate against last-wins bounds: with two regions, a
+  # predicate that remembers only the last start/end reports a block inside the
+  # first as "not in a region", skips the heal, and leaves it to be eaten.
+  w="$tmp/07"; mkdir -p "$w"
+  {
+    printf '# AGENTS.md — demo\n\n<!-- gitnexus:start -->\n# GitNexus A\n\n'
+    printf '<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->\n'
+    cat "$mirror"
+    printf '\n## Always Do\n\n- stuff\n<!-- gitnexus:end -->\n\n## Notes\n\n'
+    printf '<!-- gitnexus:start -->\n# GitNexus B\n<!-- gitnexus:end -->\n'
+  } > "$w/AGENTS.md"
+  local rc07; rc07="$(run_step1 "$w")"
+  p="$(lineno 'spec-source' "$w/AGENTS.md")"; rs="$(lineno 'gitnexus:start' "$w/AGENTS.md")"
+  n="$(grep -c 'spec-source' "$w/AGENTS.md")"
+  if [ "$rc07" = "0" ] && [ -n "$p" ] && [ -n "$rs" ] && [ "$p" -lt "$rs" ] && [ "$n" -eq 1 ]; then
+    echo "  ${GREEN}PASS${RESET} 07 two regions: §11 lifted out of the FIRST region (L$p < L$rs)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 07 two regions: §11 L${p:-none} vs first region L${rs:-none}, count=$n, rc=$rc07"
+    FAIL=$((FAIL+1))
+  fi
+
   # ── Self-conformance — this repo's own §11 sits above its own region ──────
   local sp sr
   sp="$(lineno 'spec-source.*§11' "$REPO_ROOT/AGENTS.md")"

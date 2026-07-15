@@ -102,6 +102,11 @@ blast radius for a latent defect.
 - Projects scaffolded into a gitnexus-led `AGENTS.md` no longer risk silent §11
   loss on the next `gitnexus analyze`.
 - Six healthy fleet files take a version-stamp bump and no content change.
+- The "is the block in a region" predicate closes each region as its end marker
+  is reached rather than comparing against a single remembered start/end. With
+  more than one region, last-wins bounds report a block inside the *first* region
+  as "not in a region" — skipping the heal and leaving it to be eaten, which is
+  the defect this ADR exists to prevent.
 - Fixtures **extract and execute** the migration's own shell via `# step1:begin`
   / `# step1:end` sentinels (inert comments in both bash and awk) rather than
   copying it. The prior fixture inlined a copy of `0001`'s awk — a copy tests the

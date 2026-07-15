@@ -165,13 +165,17 @@ if grep -q '^## Coding Discipline (NON-NEGOTIABLE)$' AGENTS.md \
   exit 3
 fi
 
-# Is the managed block currently inside a GitNexus-managed region?
+# Is the managed block currently inside ANY GitNexus-managed region?
+# Closed per region as its end marker is reached, rather than comparing against
+# a single remembered start/end: with more than one region, last-wins bounds
+# would report a block inside the FIRST region as "not in a region", skip the
+# heal, and leave it to be eaten — the very defect this migration fixes.
 block_in_region() {
   awk '
-    /^<!-- gitnexus:start -->$/ { rs=NR }
-    /^<!-- gitnexus:end -->$/   { re=NR }
     /^<!-- spec-source: agenticapps-workflow-core@[^ ]+ §11 -->$/ { p=NR }
-    END { exit !(p && rs && re && p > rs && p < re) }
+    /^<!-- gitnexus:start -->$/ { rs=NR; open=1 }
+    /^<!-- gitnexus:end -->$/   { if (open && p && p > rs && p < NR) inreg=1; open=0 }
+    END { exit !inreg }
   ' AGENTS.md
 }
 
@@ -284,12 +288,12 @@ placement, not a conformance claim.)
 # 1. §11 is present under provenance
 grep -qE '<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->' AGENTS.md
 
-# 2. §11 is NOT inside a GitNexus region (the whole point of this migration)
+# 2. §11 is NOT inside ANY GitNexus region (the whole point of this migration)
 awk '
-  /^<!-- gitnexus:start -->$/ { rs=NR }
-  /^<!-- gitnexus:end -->$/   { re=NR }
   /^<!-- spec-source: agenticapps-workflow-core@[^ ]+ §11 -->$/ { p=NR }
-  END { if (p && rs && re && p > rs && p < re) { print "FAIL: §11 is inside the GitNexus region"; exit 1 } }
+  /^<!-- gitnexus:start -->$/ { rs=NR; open=1 }
+  /^<!-- gitnexus:end -->$/   { if (open && p && p > rs && p < NR) inreg=1; open=0 }
+  END { if (inreg) { print "FAIL: §11 is inside a GitNexus region"; exit 1 } }
 ' AGENTS.md
 
 # 3. The block is byte-identical to the mirror (Step 1 verbatim assertion)
@@ -321,4 +325,5 @@ loudly instead of degrading into vacuously-passing fixtures.
 | 04 no AGENTS.md | absent file → informational skip, exit 0 |
 | 05 unmanaged conflict | state D → `exit 3`, file untouched |
 | 06 no heading/region | no `## `, no region → EOF append |
+| 07 two regions | §11 inside the **first** of two regions → lifted out (pins the region predicate against last-wins bounds) |
 | self-conformance | this repo's own §11 sits above its own region |

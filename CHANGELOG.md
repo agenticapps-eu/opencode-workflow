@@ -79,7 +79,13 @@ in every shipped artifact's frontmatter.
   in the same change; because `0001` is immutable and predates the sentinel
   convention, its shell is extracted positionally via `extract_fence_after`.
 
-  Suite: 84 PASS → **94 PASS / 0 FAIL / 1 SKIP**. Parity green. Stamps aligned at
+  The region predicate closes each region as its end marker is reached rather
+  than comparing against a single remembered start/end. With more than one
+  region, last-wins bounds report a block inside the *first* region as "not in a
+  region", skip the heal, and leave it to be eaten — the very defect this
+  migration fixes. Fixture 07 pins it.
+
+  Suite: 84 PASS → **95 PASS / 0 FAIL / 1 SKIP**. Parity green. Stamps aligned at
   0.5.0. `implements_spec: 0.9.1` deliberately untouched — `0009` fixes
   placement, not a conformance claim.
 
