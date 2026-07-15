@@ -195,6 +195,33 @@ Verification evidence: a `test(RED)` commit with fixtures failing against the
 naive anchor, then `feat(GREEN)`; `run-tests.sh` PASS ≥ 84 (current baseline on
 merged main: 84 PASS / 0 FAIL / 1 SKIP).
 
+### Post-approval additions
+
+Recorded because this repo's own lineage (`0006`, `0008`) is about documents
+making claims that stopped being true. The approved design above is what was
+agreed; implementation and review found five more things that needed pinning, so
+the shipped suite is larger than the table:
+
+- **State E — provenance with no terminator → `exit 3`.** The strip is bounded by
+  the block's closing line; without one it deleted provenance → EOF, silently, at
+  `rc=0`, with every post-check passing. Found by code review, reproduced against
+  the real extracted shell. Fixture 08.
+- **Unterminated regions count as open to EOF.** The predicate only set `inreg`
+  on an end marker, so an open region read as no-region and the migration
+  reported a block inside one as "correctly placed". Fixture 09.
+- **Multi-region predicate.** Last-wins bounds reported a block inside the first
+  of two regions as "not in a region". Found by self-review probe. Fixture 07.
+- **All three provenance matchers must agree.** `PROV_RE` was unanchored while
+  the awk predicates required a whole line; they disagreed on a quoted example
+  line, which would skip the heal entirely. Fixture 10.
+- **Preservation and canonicity assertions.** Placement assertions cannot see
+  data loss (a strip to EOF still yields a correctly-placed, singular block), and
+  §11 is canonical prose, so a paraphrasing injector must fail. Fixture 11 pins
+  the documented no-churn guarantee, which nothing had asserted.
+
+Final: **104 PASS / 0 FAIL / 1 SKIP** (baseline 84). Every new guard was verified
+load-bearing by mutating the migration and confirming the intended fixture fails.
+
 ## Divergences from the reference design
 
 Recorded because the propagation brief asked for this host's facts to be
