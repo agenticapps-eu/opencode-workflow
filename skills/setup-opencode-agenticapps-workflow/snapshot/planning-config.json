@@ -5,7 +5,7 @@
   "hooks": {
     "pre_execution": {
       "plan_review": {
-        "skill": "gsd-review",
+        "skill": "/gsd-review (slash command from upstream gsd-opencode: commands/gsd/gsd-review.md)",
         "fires_when": "phase has one or more *-PLAN.md and no *-SUMMARY.md exists for the resolved phase — fires before the first code-touching execution edit",
         "evidence": "{phase}-REVIEWS.md in the phase directory, carrying independent plan review from at least two external AI reviewers",
         "phase_resolution_order": [

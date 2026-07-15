@@ -635,9 +635,13 @@ test_migration_0007() {
   # §02 (0.5.0) — plan-review bound on BOTH seeding paths, with the two
   # sub-requirements §02 makes normative: robust resolution order (a single
   # mutable pointer is non-conformant, core ADR-0025) and the grandfather rule.
+  # Binding asserted by what it RESOLVES TO, not by an exact literal — 0008
+  # re-labelled it to the annotated slash form. Pinning the string here would
+  # make this a tripwire on its own successor, which is the mistake 0006's test
+  # made and 0007 had to fix.
   for f in "$snap" "$tpl" "$REPO_ROOT/.planning/config.json"; do
     local label; label="$(basename "$(dirname "$f")")/$(basename "$f")"
-    if jq -e '(.hooks.pre_execution.plan_review.skill == "gsd-review")
+    if jq -e '(.hooks.pre_execution.plan_review.skill | test("gsd-review"))
               and ((.hooks.pre_execution.plan_review.phase_resolution_order | length) == 4)
               and (.hooks.pre_execution.plan_review.grandfather | test("SUMMARY"))' \
          "$f" >/dev/null 2>&1; then
@@ -692,6 +696,70 @@ test_migration_0007() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Migration 0008 — the plan-review binding names the slash COMMAND it is.
+#
+# 0007 bound it as `"skill": "gsd-review"`. There is no gsd-review under
+# skills/ — upstream gsd-opencode ships it as commands/gsd/gsd-review.md. The
+# gate resolved either way, but a reader greps skills/, finds nothing, and
+# concludes the binding is dead (which is exactly what happened, to the agent
+# that wrote 0007, against its own code). A binding table that sends readers to
+# the wrong place fails its one job (spec/09 item 3).
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_migration_0008() {
+  echo ""
+  echo "${YELLOW}=== Migration 0008 — plan-review binding names the command ===${RESET}"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "  ${YELLOW}SKIP${RESET} jq not available — binding-label test not run"
+    SKIP=$((SKIP+1)); return
+  fi
+
+  local snap="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/snapshot/planning-config.json"
+  local tpl="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/templates/config-hooks.json"
+
+  # A GSD entry point is a slash command, not a $skill. Every gate bound to one
+  # must say so in slash form — the idiom the trigger's Step 2 routing already
+  # uses for /gsd-discuss-phase, /gsd-plan-phase, /gsd-execute-phase.
+  for f in "$snap" "$tpl" "$REPO_ROOT/.planning/config.json"; do
+    local label; label="$(basename "$(dirname "$f")")/$(basename "$f")"
+    if jq -e '.hooks.pre_execution.plan_review.skill | startswith("/gsd-review")' \
+         "$f" >/dev/null 2>&1; then
+      echo "  ${GREEN}PASS${RESET} $label: plan-review names /gsd-review (slash-command form)"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} $label: plan-review binding is not in slash-command form"
+      FAIL=$((FAIL+1))
+    fi
+  done
+
+  # The generalized rule: no binding may name a bare `gsd-*` as though it were a
+  # skill. gsd-opencode ships gsd-* as commands (commands/gsd/*.md); the only
+  # gsd-* under skills/ are gsd-code-review / gsd-ui-review, which this host does
+  # not bind. A bare gsd-* value here means someone repeated 0007's mistake.
+  local bare
+  bare="$(jq -r '[.. | objects | select(has("skill")) | .skill]
+                 | map(select(type == "string" and test("^gsd-")))
+                 | join(" ")' "$REPO_ROOT/.planning/config.json" 2>/dev/null)"
+  if [ -z "$bare" ]; then
+    echo "  ${GREEN}PASS${RESET} no binding names a bare gsd-* as a skill"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} bindings name bare gsd-* as skills (they are slash commands): $bare"
+    FAIL=$((FAIL+1))
+  fi
+
+  # The claim must NOT have moved — 0008 corrects a label, not conformance.
+  if grep -q '^implements_spec: 0.9.1$' "$REPO_ROOT/skills/agentic-apps-workflow/SKILL.md"; then
+    echo "  ${GREEN}PASS${RESET} conformance claim untouched at 0.9.1"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} claim moved — 0008 must not touch implements_spec"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Drift test — the scaffolder's SKILL.md version MUST equal the latest
 # migration's to_version (version is migration-coupled).
 # ─────────────────────────────────────────────────────────────────────────────
@@ -738,6 +806,7 @@ test_repo_layout() {
     migrations/0005-knowledge-capture.md \
     migrations/0006-fix-config-conformance-claim.md \
     migrations/0007-absorb-spec-0.9.1.md \
+    migrations/0008-fix-plan-review-binding-label.md \
     skills/setup-opencode-agenticapps-workflow/templates/config-knowledge-capture.json \
     skills/setup-opencode-agenticapps-workflow/templates/obsidian-learnings-note.md \
     docs/decisions/0008-knowledge-capture.md \
@@ -796,6 +865,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0007" ]; then
   test_migration_0007
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0008" ]; then
+  test_migration_0008
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then
