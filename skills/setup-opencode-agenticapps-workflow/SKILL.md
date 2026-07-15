@@ -145,6 +145,20 @@ present); in interactive mode show the diff before writing.
    <!-- END: agentic-apps-workflow sections -->
    ```
 
+   **Always place the pair ABOVE a leading `<!-- gitnexus:start -->`
+   region** (migration `0009`). In an `AGENTS.md` that leads with a
+   GitNexus block, the first title is GitNexus's own
+   `# GitNexus — Code Intelligence` H1 *inside* the region — so "after
+   any existing title" would put the workflow section in the region, and
+   the next `gitnexus analyze` regenerates that region and destroys it
+   silently. If a region leads the file, insert above
+   `<!-- gitnexus:start -->`.
+
+   §11 needs no separate anchoring here: it is pre-baked at the top of
+   `$SNAP/agents-block.md`, so it rides wherever the pair lands. That is
+   why this path carries no first-`## ` anchor and needs no anchor-parity
+   guard against `0009` — see ADR-0009.
+
    If the markers already exist, replace the content between them with
    `$SNAP/agents-block.md` (this is also how `update` refreshes the
    section). Never duplicate the block.

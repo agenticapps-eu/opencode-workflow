@@ -113,18 +113,38 @@ test_migration_0001() {
     FAIL=$((FAIL+1))
   fi
 
-  # Injection byte-identity: applying Step 1's awk to fixture A must produce a
-  # §11 block byte-identical to the mirror.
-  awk -v mirror="$mirror" '
-    /^## / && !done {
-      print "<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->"
-      while ((getline line < mirror) > 0) print line
-      close(mirror); print ""; done=1
-    }
-    { print }
-  ' "$tmp/a-AGENTS.md" > "$tmp/a-injected.md"
+  # Injection byte-identity: applying Step 1's REAL shell to fixture A must
+  # produce a §11 block byte-identical to the mirror.
+  #
+  # This used to inline a copy of 0001's awk. A copy tests the copy — it stays
+  # green while the migration drifts underneath it. 0001 is immutable and so
+  # cannot be retrofitted with the `# step1:begin` sentinels 0009 uses, so its
+  # shell is extracted positionally instead (see extract_fence_after).
+  local step1_0001="$tmp/0001-step1.sh"
+  extract_fence_after "$REPO_ROOT/migrations/0001-inject-spec-11-coding-discipline.md" \
+    'Step 1: Inject the §11 canonical block into AGENTS.md' "$step1_0001"
+
+  # Shape assertion — a mis-extraction must fail loudly, not vacuously pass.
+  if [ -s "$step1_0001" ] \
+     && bash -n "$step1_0001" 2>/dev/null \
+     && grep -q 'MIRROR=' "$step1_0001" \
+     && grep -q 'awk -v mirror=' "$step1_0001" \
+     && grep -q 'AGENTS.md' "$step1_0001" \
+     && ! grep -q '```' "$step1_0001"; then
+    echo "  ${GREEN}PASS${RESET} extractor locked onto 0001's Step 1 shell (shape ok, parses clean)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} extractor did NOT lock onto 0001's Step 1 shell"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  local w0001="$tmp/0001-run"; mkdir -p "$w0001"
+  cp "$tmp/a-AGENTS.md" "$w0001/AGENTS.md"
+  local cfg0001="$tmp/0001-cfg/skills/setup-opencode-agenticapps-workflow/templates/spec-mirrors"
+  mkdir -p "$cfg0001"; cp "$mirror" "$cfg0001/11-coding-discipline-0.4.0.md"
+  ( cd "$w0001" && OPENCODE_CONFIG_DIR="$tmp/0001-cfg" bash "$step1_0001" >/dev/null 2>&1 )
   awk '/^## Coding Discipline \(NON-NEGOTIABLE\)$/{f=1} f{print} /session-level discipline the model brings to every diff\.$/{exit}' \
-    "$tmp/a-injected.md" > "$tmp/a-block.md"
+    "$w0001/AGENTS.md" > "$tmp/a-block.md"
   if diff -q "$tmp/a-block.md" "$mirror" >/dev/null 2>&1; then
     echo "  ${GREEN}PASS${RESET} injected §11 block is byte-identical to the mirror"
     PASS=$((PASS+1))
@@ -760,6 +780,356 @@ test_migration_0008() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Migration 0009 — Region-aware §11 placement
+#
+# The §11 injector anchored on the first '## ' heading. In an AGENTS.md that
+# leads with a GitNexus block, the first '## ' is '## Always Do' — inside
+# <!-- gitnexus:start -->…<!-- gitnexus:end -->. The block lands in the region
+# and the next `gitnexus analyze` regenerates the region and eats it silently.
+# Recovery is closed (0001/0004 never replay), so this fixes forward.
+#
+# These fixtures EXTRACT and EXECUTE the migration's own Step 1 shell rather
+# than copying it. A fixture that inlines a copy tests the copy, and the two
+# drift silently — which is exactly what run-tests.sh:119 did for 0001's awk.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Extract a sentinel-delimited region from a migration document.
+# Sentinels are `# name:begin` / `# name:end` — inert comments in both bash and
+# awk, so they live inside the migration's real shell without altering it.
+# Preferred for migrations written after 0009.
+# Sentinels must match a WHOLE line. A substring match re-opens capture on any
+# prose that merely mentions the sentinel — e.g. the migration's own Testing
+# section, which names `# step1:begin` inline — and silently swallows the rest of
+# the document into the extracted script. Capture stops at the first :end.
+extract_region() { # $1 doc  $2 sentinel-name  $3 out-file
+  awk -v name="$2" '
+    $0 ~ ("^[[:space:]]*# " name ":begin[[:space:]]*$") { f=1; next }
+    $0 ~ ("^[[:space:]]*# " name ":end[[:space:]]*$")   { if (f) exit }
+    f { print }
+  ' "$1" > "$3"
+}
+
+# Extract the first ```bash fenced block following an anchor line.
+# For migrations that predate the sentinel convention and are immutable, so
+# cannot be retrofitted with sentinels (0001, 0004). Positional and therefore
+# more brittle than extract_region — every caller MUST pair it with a shape
+# assertion so a mis-lock fails loudly rather than passing vacuously.
+extract_fence_after() { # $1 doc  $2 anchor-substring  $3 out-file
+  awk -v anchor="$2" '
+    !seen && index($0, anchor) { seen=1; next }
+    seen && !inf && /^```bash$/ { inf=1; next }
+    inf && /^```$/ { exit }
+    inf { print }
+  ' "$1" > "$3"
+}
+
+test_migration_0009() {
+  echo ""
+  echo "${YELLOW}=== Migration 0009 — region-aware §11 placement ===${RESET}"
+
+  local doc="$REPO_ROOT/migrations/0009-spec-11-region-aware-placement.md"
+  local mirror="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+
+  if [ ! -f "$doc" ] || [ ! -f "$mirror" ]; then
+    echo "  ${RED}FAIL${RESET} 0009 document or §11 mirror missing"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+
+  local step1="$tmp/step1.sh"
+  extract_region "$doc" "step1" "$step1"
+
+  # Extractor shape assertion — fail LOUDLY if it locked onto the wrong region.
+  # Without this, a mis-extraction degrades into fixtures that vacuously pass.
+  #
+  # `bash -n` is the load-bearing check, not a formality: an over-capture that
+  # ran past the sentinel and swallowed the document's prose still contained
+  # every marker below and passed the grep checks alone. Syntax-checking the
+  # result is what actually proves the extraction is a script and nothing else.
+  if [ -s "$step1" ] \
+     && bash -n "$step1" 2>/dev/null \
+     && grep -q 'MIRROR=' "$step1" \
+     && grep -q 'AGENTS.md' "$step1" \
+     && grep -q 'awk' "$step1" \
+     && ! grep -q '```' "$step1"; then
+    echo "  ${GREEN}PASS${RESET} extractor locked onto 0009's Step 1 shell (shape ok, parses clean)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} extractor did NOT lock onto Step 1's shell — fixtures below are meaningless"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  # Redirect the config dir at a temp mirror so the extracted shell resolves
+  # $MIRROR exactly as it would inside a real project.
+  local cfgmir="$tmp/cfg/skills/setup-opencode-agenticapps-workflow/templates/spec-mirrors"
+  mkdir -p "$cfgmir"
+  cp "$mirror" "$cfgmir/11-coding-discipline-0.4.0.md"
+
+  run_step1() { # $1 workdir -> echoes exit code
+    ( cd "$1" && OPENCODE_CONFIG_DIR="$1/../cfg" bash "$step1" >"$1/step1.log" 2>&1; echo $? )
+  }
+  lineno() { grep -n "$1" "$2" 2>/dev/null | head -1 | cut -d: -f1; }
+
+  # Everything that is NOT the managed §11 block must survive a heal untouched.
+  # Placement assertions alone cannot see data loss: a strip that ran to EOF
+  # still yields a correctly-placed, singular block — and passes 02/07 while the
+  # rest of the file is gone.
+  strip11() { # $1 file -> stdout, §11 block removed
+    awk '
+      /^<!-- spec-source: agenticapps-workflow-core@[^ ]+ §11 -->$/ {inblk=1; next}
+      inblk && /session-level discipline the model brings to every diff\.$/ {inblk=0; skipblank=1; next}
+      inblk {next}
+      skipblank && /^$/ {skipblank=0; next}
+      {skipblank=0; print}
+    ' "$1"
+  }
+  assert_preserved() { # $1 before  $2 after  $3 label
+    if diff -q <(strip11 "$1") <(strip11 "$2") >/dev/null 2>&1; then
+      echo "  ${GREEN}PASS${RESET} $3: non-§11 content preserved byte-for-byte"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} $3: the heal destroyed non-§11 content"
+      diff <(strip11 "$1") <(strip11 "$2") | head -4
+      FAIL=$((FAIL+1))
+    fi
+  }
+  # §11 is canonical prose (a spec MUST). 0001's suite diffs the injected block
+  # against the mirror; 0009 rewrote the injector, so it must carry that net too
+  # — otherwise a paraphrasing injector passes every placement assertion.
+  assert_verbatim() { # $1 healed-file  $2 label
+    if awk '/^## Coding Discipline \(NON-NEGOTIABLE\)$/{f=1} f{print} /session-level discipline the model brings to every diff\.$/{exit}' "$1" \
+         | diff -q - "$mirror" >/dev/null 2>&1; then
+      echo "  ${GREEN}PASS${RESET} $2: injected block byte-identical to the mirror"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} $2: injected block is NOT byte-identical to the mirror"
+      FAIL=$((FAIL+1))
+    fi
+  }
+
+  # ── Fixture 01 — gitnexus-led file, §11 absent (state C) ──────────────────
+  # The regression shape: first '## ' is INSIDE the region.
+  local w="$tmp/01"; mkdir -p "$w"
+  printf '# AGENTS.md — demo\n\n<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n## Always Do\n\n- use the graph\n<!-- gitnexus:end -->\n\n## Project Notes\n\nbody\n' > "$w/AGENTS.md"
+  cp "$w/AGENTS.md" "$w/before.md"
+  local rc01; rc01="$(run_step1 "$w")"
+  local p rs
+  p="$(lineno 'spec-source' "$w/AGENTS.md")"; rs="$(lineno 'gitnexus:start' "$w/AGENTS.md")"
+  # rc is asserted, not discarded: a Step 1 that produces the right file while
+  # exiting non-zero means the extracted shell is running something it should
+  # not, and that is how a bad extraction hides.
+  if [ "$rc01" = "0" ] && [ -n "$p" ] && [ -n "$rs" ] && [ "$p" -lt "$rs" ]; then
+    echo "  ${GREEN}PASS${RESET} 01 gitnexus-led: §11 injected ABOVE the region (L$p < L$rs), exit 0"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 01 gitnexus-led: §11 at L${p:-none}, region starts L${rs:-none}, rc=$rc01"
+    FAIL=$((FAIL+1))
+  fi
+  assert_preserved "$w/before.md" "$w/AGENTS.md" "01 gitnexus-led"
+  assert_verbatim "$w/AGENTS.md" "01 gitnexus-led"
+
+  # …and it must survive the region being regenerated (what `gitnexus analyze` does).
+  awk '/^<!-- gitnexus:start -->$/{print; print "# GitNexus — regenerated"; skip=1; next}
+       /^<!-- gitnexus:end -->$/{skip=0}
+       !skip {print}' "$w/AGENTS.md" > "$w/regen.md"
+  if grep -q 'Coding Discipline (NON-NEGOTIABLE)' "$w/regen.md"; then
+    echo "  ${GREEN}PASS${RESET} 01 §11 survives a modelled region regeneration"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 01 §11 destroyed by region regeneration"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Fixture 02 — §11 already INSIDE a region (state B) ────────────────────
+  w="$tmp/02"; mkdir -p "$w"
+  {
+    printf '# AGENTS.md — demo\n\n<!-- gitnexus:start -->\n# GitNexus\n\n'
+    printf '<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->\n'
+    cat "$mirror"
+    printf '\n## Always Do\n\n- stuff\n<!-- gitnexus:end -->\n\n## Project Notes\n\nbody\n'
+  } > "$w/AGENTS.md"
+  cp "$w/AGENTS.md" "$w/before.md"
+  local rc02; rc02="$(run_step1 "$w")"
+  p="$(lineno 'spec-source' "$w/AGENTS.md")"; rs="$(lineno 'gitnexus:start' "$w/AGENTS.md")"
+  local n; n="$(grep -c 'spec-source' "$w/AGENTS.md")"
+  if [ "$rc02" = "0" ] && [ -n "$p" ] && [ -n "$rs" ] && [ "$p" -lt "$rs" ] && [ "$n" -eq 1 ]; then
+    echo "  ${GREEN}PASS${RESET} 02 inside-region: §11 moved above the region, present exactly once"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 02 inside-region: §11 L${p:-none} vs region L${rs:-none}, count=$n, rc=$rc02"
+    FAIL=$((FAIL+1))
+  fi
+  assert_preserved "$w/before.md" "$w/AGENTS.md" "02 inside-region"
+  assert_verbatim "$w/AGENTS.md" "02 inside-region"
+
+  # ── Fixture 03 — healthy file (state A) → byte-identical, zero churn ──────
+  # Uses this repo's REAL AGENTS.md: the strongest available no-op evidence.
+  w="$tmp/03"; mkdir -p "$w"
+  cp "$REPO_ROOT/AGENTS.md" "$w/AGENTS.md"
+  local rc03; rc03="$(run_step1 "$w")"
+  if [ "$rc03" = "0" ] && diff -q "$REPO_ROOT/AGENTS.md" "$w/AGENTS.md" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} 03 healthy: real AGENTS.md byte-identical (zero churn)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 03 healthy: Step 1 churned an already-correct AGENTS.md (rc=$rc03)"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Fixture 04 — no AGENTS.md → informational skip, exit 0 ────────────────
+  w="$tmp/04"; mkdir -p "$w"
+  local rc; rc="$(run_step1 "$w")"
+  if [ "$rc" = "0" ] && grep -q 'no AGENTS.md' "$w/step1.log"; then
+    echo "  ${GREEN}PASS${RESET} 04 absent AGENTS.md: informational skip, exit 0"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 04 absent AGENTS.md: rc=$rc (want 0 + skip notice)"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Fixture 05 — hand-pasted §11, no provenance (state D) → exit 3 ────────
+  w="$tmp/05"; mkdir -p "$w"
+  printf '# Title\n\n## Coding Discipline (NON-NEGOTIABLE)\n\nhand-written\n' > "$w/AGENTS.md"
+  cp "$w/AGENTS.md" "$w/before.md"
+  rc="$(run_step1 "$w")"
+  if [ "$rc" = "3" ] && diff -q "$w/before.md" "$w/AGENTS.md" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} 05 unmanaged §11: refused with exit 3, file untouched"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 05 unmanaged §11: rc=$rc (want 3) or file was modified"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Fixture 06 — no '## ', no region → EOF append ─────────────────────────
+  w="$tmp/06"; mkdir -p "$w"
+  printf '# Only a title\n\nsome body\n' > "$w/AGENTS.md"
+  local rc06; rc06="$(run_step1 "$w")"
+  if [ "$rc06" = "0" ] && grep -q 'spec-source' "$w/AGENTS.md" && grep -q 'Coding Discipline' "$w/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} 06 no heading/region: §11 appended at EOF"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 06 no heading/region: §11 not appended (rc=$rc06)"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Fixture 07 — §11 inside the FIRST of two regions (state B, multi) ─────
+  # Guards the region predicate against last-wins bounds: with two regions, a
+  # predicate that remembers only the last start/end reports a block inside the
+  # first as "not in a region", skips the heal, and leaves it to be eaten.
+  w="$tmp/07"; mkdir -p "$w"
+  {
+    printf '# AGENTS.md — demo\n\n<!-- gitnexus:start -->\n# GitNexus A\n\n'
+    printf '<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->\n'
+    cat "$mirror"
+    printf '\n## Always Do\n\n- stuff\n<!-- gitnexus:end -->\n\n## Notes\n\n'
+    printf '<!-- gitnexus:start -->\n# GitNexus B\n<!-- gitnexus:end -->\n'
+  } > "$w/AGENTS.md"
+  cp "$w/AGENTS.md" "$w/before.md"
+  local rc07; rc07="$(run_step1 "$w")"
+  p="$(lineno 'spec-source' "$w/AGENTS.md")"; rs="$(lineno 'gitnexus:start' "$w/AGENTS.md")"
+  n="$(grep -c 'spec-source' "$w/AGENTS.md")"
+  if [ "$rc07" = "0" ] && [ -n "$p" ] && [ -n "$rs" ] && [ "$p" -lt "$rs" ] && [ "$n" -eq 1 ]; then
+    echo "  ${GREEN}PASS${RESET} 07 two regions: §11 lifted out of the FIRST region (L$p < L$rs)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 07 two regions: §11 L${p:-none} vs first region L${rs:-none}, count=$n, rc=$rc07"
+    FAIL=$((FAIL+1))
+  fi
+  assert_preserved "$w/before.md" "$w/AGENTS.md" "07 two regions"
+
+  # ── Fixture 08 — provenance but NO terminator (state E) → exit 3 ──────────
+  # The strip is bounded by the terminator line. Without it the strip would run
+  # to EOF, deleting region end markers and project content — and every
+  # post-check would still pass on the wreckage. Must refuse, not destroy.
+  w="$tmp/08"; mkdir -p "$w"
+  {
+    printf '# AGENTS.md — demo\n\n<!-- gitnexus:start -->\n# GitNexus\n\n'
+    printf '<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->\n'
+    printf '## Coding Discipline (NON-NEGOTIABLE)\n\ntail trimmed by hand\n'
+    printf '\n## Always Do\n\n- graph\n<!-- gitnexus:end -->\n\n## Project Notes\n\nKEEP ME\n'
+  } > "$w/AGENTS.md"
+  cp "$w/AGENTS.md" "$w/before.md"
+  local rc08; rc08="$(run_step1 "$w")"
+  if [ "$rc08" = "3" ] && diff -q "$w/before.md" "$w/AGENTS.md" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} 08 no terminator: refused with exit 3, file untouched"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 08 no terminator: rc=$rc08 (want 3) or file was modified — DATA LOSS"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Fixture 09 — unterminated region (no end marker) ──────────────────────
+  # An open region runs to EOF, so a block after its start marker IS inside it.
+  # Reporting "correctly placed" here is a false success that leaves the block
+  # exactly where the next `gitnexus analyze` eats it.
+  w="$tmp/09"; mkdir -p "$w"
+  {
+    printf '# AGENTS.md — demo\n\n<!-- gitnexus:start -->\n# GitNexus\n\n'
+    printf '<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->\n'
+    cat "$mirror"
+    printf '\n'
+  } > "$w/AGENTS.md"
+  local rc09; rc09="$(run_step1 "$w")"
+  p="$(lineno 'spec-source' "$w/AGENTS.md")"; rs="$(lineno 'gitnexus:start' "$w/AGENTS.md")"
+  if [ "$rc09" = "0" ] && [ -n "$p" ] && [ -n "$rs" ] && [ "$p" -lt "$rs" ]; then
+    echo "  ${GREEN}PASS${RESET} 09 unterminated region: §11 lifted above the open region (L$p < L$rs)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 09 unterminated region: §11 L${p:-none} vs region L${rs:-none}, rc=$rc09 — left inside an open region"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Fixture 10 — provenance only QUOTED in prose, no real block ───────────
+  # All three matchers must agree on what counts as the provenance line. An
+  # unanchored shell matcher reads "block present" off an indented example while
+  # the whole-line awk predicates find nothing — so the heal is skipped and §11
+  # is never injected into a file that has none.
+  w="$tmp/10"; mkdir -p "$w"
+  printf '# Title\n\nExample of provenance:\n\n    <!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->\n\n## Notes\n\nbody\n' > "$w/AGENTS.md"
+  local rc10; rc10="$(run_step1 "$w")"
+  if [ "$rc10" = "0" ] && grep -q '^## Coding Discipline (NON-NEGOTIABLE)$' "$w/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} 10 quoted provenance: §11 still injected (matchers agree)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 10 quoted provenance: rc=$rc10, §11 not injected — a quoted line read as a real block"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Fixture 11 — healthy block, non-canonical position → left alone ───────
+  # Pins the documented Surgical-Changes guarantee: only the in-region case is a
+  # defect. A block that is merely lower than the anchor must not be moved.
+  w="$tmp/11"; mkdir -p "$w"
+  {
+    printf '# Title\n\n## Project Notes\n\nbody\n\n'
+    printf '<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->\n'
+    cat "$mirror"
+    printf '\n## Trailing\n\nmore\n'
+  } > "$w/AGENTS.md"
+  cp "$w/AGENTS.md" "$w/before.md"
+  local rc11; rc11="$(run_step1 "$w")"
+  if [ "$rc11" = "0" ] && diff -q "$w/before.md" "$w/AGENTS.md" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} 11 healthy non-canonical: left untouched (no gratuitous churn)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 11 healthy non-canonical: rc=$rc11 or block was moved — churns project files"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Self-conformance — this repo's own §11 sits above its own region ──────
+  local sp sr
+  sp="$(lineno 'spec-source.*§11' "$REPO_ROOT/AGENTS.md")"
+  sr="$(lineno 'gitnexus:start' "$REPO_ROOT/AGENTS.md")"
+  if [ -n "$sp" ] && { [ -z "$sr" ] || [ "$sp" -lt "$sr" ]; }; then
+    echo "  ${GREEN}PASS${RESET} self-conformance: this repo's §11 (L$sp) is above its region (L${sr:-none})"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} self-conformance: §11 L${sp:-none} is not above region L${sr:-none}"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Drift test — the scaffolder's SKILL.md version MUST equal the latest
 # migration's to_version (version is migration-coupled).
 # ─────────────────────────────────────────────────────────────────────────────
@@ -869,6 +1239,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0008" ]; then
   test_migration_0008
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0009" ]; then
+  test_migration_0009
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then

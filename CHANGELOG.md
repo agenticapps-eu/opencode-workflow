@@ -9,6 +9,103 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-07-15
+
+### Fixed
+- **§11 could be injected inside a GitNexus-managed region and silently
+  destroyed (migration `0009`).** `0001` anchored the canonical "Coding
+  Discipline" block immediately before the first `## ` heading in `AGENTS.md`
+  (`0001:91`), and `0004` re-injected it the same way (`0004:77`). That is only a
+  safe boundary if the heading belongs to *project* content. In an `AGENTS.md`
+  that leads with a GitNexus block, the first `## ` is `## Always Do` — inside
+  `<!-- gitnexus:start -->…<!-- gitnexus:end -->`. The block lands in the region,
+  and the next `gitnexus analyze` regenerates the region and destroys it with no
+  diagnostic.
+
+  **Recovery was closed**, which is why this is a new migration rather than an
+  edit. `update` marks a migration pending iff `installed >= from_version &&
+  installed < to_version`; `0001`/`0004`'s `to_version` are long past, so they
+  never replay, and their pre-flight version gates also abort the
+  `--migration NNNN` force path. Once eaten, the block needed a hand-paste.
+  `0001`/`0004` are immutable — fixed forward.
+
+  The new anchor rule: *insert before the first line that is either a `## `
+  heading or a `<!-- gitnexus:start -->` marker — whichever comes first; EOF if
+  neither.* A one-alternation delta, so `0001`'s structural invariant survives
+  (the block is still always followed by a `## ` or EOF, which is what bounds the
+  managed section for replace/rollback). Validated before the migration was
+  written: with any existing block stripped it re-derives the block's current
+  position exactly in all six real fleet `AGENTS.md` files — zero churn.
+
+  **This host's defect was LATENT, not live.** A fleet scan on 2026-07-15 found
+  0/6 files affected — each has project `## ` headings above its region. Unlike
+  the reference host, there was no broken repo to repair; this prevents the
+  defect in projects scaffolded going forward. Healthy repos take a version-stamp
+  bump and no content change.
+
+  Migration `0009` heals four states: correctly-anchored (no-op),
+  inside-a-region (move above it), absent (inject at the anchor), and
+  hand-pasted-without-provenance (refuse, `exit 3` — inherits `0001`'s conflict
+  rule; never overwrite unmanaged prose). Idempotency is provenance-based plus a
+  region predicate, so state A stays a no-op while an in-region block can re-run.
+
+  Rejected: *"anchor before `gitnexus:start` if a region exists, else the first
+  `## `"* — the obvious reading of "put it above the region", and wrong. Measured
+  against the real `codex-workflow/AGENTS.md` (region at L271), §11 would move
+  from L17 to **L190**, violating §12's placement advisory. The region is only
+  the anchor when it comes *first*. See ADR-0009.
+
+### Changed
+- **The setup path's placement prose is region-aware.** Step 9 said "insert (at
+  top, after any existing title)". On a region-led `AGENTS.md` the first title is
+  GitNexus's own `# GitNexus — Code Intelligence` H1 *inside* the region, so the
+  prose admitted an insertion into the region — the same defect class by a
+  different mechanism. It now requires the marker pair to sit above a leading
+  region.
+
+  No `anchor-parity` guard is shipped, and the reason is structural: unlike the
+  reference host, **this host's setup path carries no anchor awk at all**. §11 is
+  pre-baked at the top of `snapshot/agents-block.md`, so it rides wherever the
+  marker pair lands and the first-`## `-anchor defect cannot occur via setup.
+  There is no second copy of the rule to drift against, and §08 parity for the
+  block's *content* is already enforced by `check-snapshot-parity.sh`.
+
+- **Fixtures execute the migration's own shell instead of copying it.** `0009`'s
+  Step 1 carries `# step1:begin` / `# step1:end` sentinels — inert comments in
+  both bash and awk — and the fixtures extract and run it, with a shape assertion
+  so a mis-extraction fails loudly rather than degrading into vacuously-passing
+  tests. The pre-existing fixture at `run-tests.sh:119` inlined a *copy* of
+  `0001`'s awk (a copy tests the copy, and the two drift silently) and is retired
+  in the same change; because `0001` is immutable and predates the sentinel
+  convention, its shell is extracted positionally via `extract_fence_after`.
+
+  The region predicate closes each region as its end marker is reached rather
+  than comparing against a single remembered start/end, and treats an
+  unterminated region as open to EOF. Last-wins bounds report a block inside the
+  *first* of two regions as "not in a region"; ignoring open regions reports a
+  block inside one as healthy. Both skip the heal and leave the block to be
+  eaten — the very defect this migration fixes. Fixtures 07 and 09 pin them.
+
+  `0009` also refuses (`exit 3`, state E) when a block carries provenance but no
+  terminator line. The strip is bounded by that terminator; without it the heal
+  deleted everything from the provenance line to EOF — region end markers and
+  project content included — silently, at `rc=0`, with **every post-check still
+  passing** (the re-injected block is fresh, so the verbatim check trivially
+  holds, and "not in a region" passes *because* the end marker was eaten).
+  Reachable by a hand-edit to the block's tail, or by a future mirror whose
+  closing prose changes, since `PROV_RE` is version-agnostic while the terminator
+  is `@0.4.0`'s prose. Fixture 08 pins the refusal.
+
+  Fixtures 01/02/07 assert non-§11 content is preserved byte-for-byte, and 01/02
+  that the injected block is byte-identical to the mirror. Placement assertions
+  cannot see data loss — a strip that ran to EOF still yields a correctly-placed,
+  singular block — and §11 is canonical prose, so a paraphrasing injector must
+  fail. Both were verified to kill mutants that otherwise passed the whole suite.
+
+  Suite: 84 PASS → **102 PASS / 0 FAIL / 1 SKIP**. Parity green. Stamps aligned
+  at 0.5.0. `implements_spec: 0.9.1` deliberately untouched — `0009` fixes
+  placement, not a conformance claim.
+
 ## [0.4.1] — 2026-07-15
 
 ### Fixed
