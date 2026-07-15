@@ -45,23 +45,39 @@ in installed projects. This fixes forward. (Same discipline `0008` applied to
 
 ## Scope note — this host's defect is LATENT, not live
 
-A fleet scan on 2026-07-15 found **0 of 6** real `AGENTS.md` files affected: each
-has project `## ` headings above its GitNexus region, so the naive anchor happens
-to land correctly.
+**Corrected 2026-07-15** — the original scan in this document was wrong twice:
+it covered only the `agenticapps/` family, and it counted `codex-*` hosts that
+this scaffolder does not install. See "Fleet scan — corrected" below. The
+conclusion (latent, not live) survives; the reason given for it did not.
 
-| File | §11 | Region | State |
-|---|---|---|---|
-| `opencode-workflow/AGENTS.md` | L17 | L240 | healthy — above region |
-| `codex-workflow/AGENTS.md` | L17 | L271 | healthy — above region |
-| `workflow-testbed/AGENTS.md` | L5 | none | healthy |
-| `workflow-testbed-codex/AGENTS.md` | L5 | none | healthy |
-| `bench-opencode/AGENTS.md` | L5 | none | healthy |
-| `bench-codex/AGENTS.md` | L5 | none | healthy |
+The real fleet is every project carrying `.opencode/workflow-version.txt`:
 
-Unlike `claude-workflow` — whose equivalent migration `0029` had a live broken
-repo to repair — there is nothing to fix here today. This is a placement fix for
-projects scaffolded **going forward**, plus self-protection. Healthy repos take a
-version-stamp bump and no content change.
+| Project | §11 | Region | Region-led? | Shape |
+|---|---|---|---|---|
+| `factiv/cparx` | L45 | L1–43 | **YES** | §11 sits **below** the region — outside it |
+| `agenticapps/opencode-workflow` | L17 | L240–282 | no | project headings lead the file |
+| `agenticapps/bench-opencode` | L5 | none | no | no region |
+| `agenticapps/workflow-testbed` | L5 | none | no | no region |
+
+**0 of 4 are affected** — no block is currently inside a region — so the defect is
+latent and there is nothing to repair, unlike `claude-workflow`, whose equivalent
+`0029` had a live broken repo.
+
+But the reason is **not** "every file has project `## ` headings above its
+region". `cparx` is genuinely region-led: its region occupies L1–43 and its first
+`## ` is `## Always Do` at **L8, inside the region**. It is safe only because its
+§11 landed *below* the region entirely.
+
+`cparx` is therefore the repo this migration exists for. Measured against its
+real `AGENTS.md`:
+
+- the naive anchor would place §11 at **L8 — inside the region**, to be destroyed
+  by the next `gitnexus analyze`;
+- this migration's rule places it at **L1**, above the region.
+
+Any future state-C re-inject in `cparx` hits exactly that. Healthy projects take
+a version-stamp bump and no content change; `cparx` took precisely that on
+2026-07-15 (state A no-op — §11 left at L45, only the stamp moved).
 
 **Why a minor bump:** no gate is added, removed, or rebound, but the injection
 rule that every future project inherits changes. `implements_spec: 0.9.1` is
@@ -82,16 +98,22 @@ survives: the block is still always followed by a `## ` line or EOF, which is
 what bounds the managed section for replace and rollback.
 
 **Validated before this migration was written.** With any existing block
-stripped, the rule re-derives the block's current position exactly in all six
-real fleet files — a true no-op, zero churn.
+stripped, the rule re-derives the block's current position exactly in every real
+fleet file — a true no-op, zero churn.
 
 ### Rejected: "before `gitnexus:start` if a region exists, else the first `## `"
 
-The obvious reading of "put it above the region", and wrong. Measured against the
-real `codex-workflow/AGENTS.md`, whose region starts at L271: §11 would move from
-L17 to **L190**, violating §12's placement advisory ("near the top", "not below
-long appendices"). The region is only the anchor when it comes *first* — which is
-what `whichever comes first` encodes.
+The obvious reading of "put it above the region", and wrong. Measured against
+this repo's own `AGENTS.md`, whose region starts at L240: §11 would move from L17
+to **L159**, violating §12's placement advisory ("near the top", "not below long
+appendices"). The region is only the anchor when it comes *first* — which is what
+`whichever comes first` encodes, and which is why `cparx` (region at L1) and this
+repo (region at L240) both land correctly under one rule.
+
+(The original text measured this against `codex-workflow/AGENTS.md`. The number
+was real but the file is a **codex** host, not installed by this scaffolder —
+part of the same fleet-scan error corrected above. Re-measured in-fleet; the
+conclusion is unchanged.)
 
 ## States healed
 

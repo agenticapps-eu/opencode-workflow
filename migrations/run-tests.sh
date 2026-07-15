@@ -1116,6 +1116,29 @@ test_migration_0009() {
     FAIL=$((FAIL+1))
   fi
 
+  # ── Fixture 12 — region-LED file, §11 already BELOW the region ───────────
+  # factiv/cparx's real shape (region L1-43, §11 at L45): the block is outside
+  # the region, so it is healthy and must not move — even though the canonical
+  # anchor for a fresh inject would be L1, above the region. Pins the real
+  # production state against a future "always move to the anchor" change, which
+  # would churn cparx for no benefit.
+  w="$tmp/12"; mkdir -p "$w"
+  {
+    printf '<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n## Always Do\n\n- graph\n<!-- gitnexus:end -->\n\n'
+    printf '<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->\n'
+    cat "$mirror"
+    printf '\n## Project Notes\n\nbody\n'
+  } > "$w/AGENTS.md"
+  cp "$w/AGENTS.md" "$w/before.md"
+  local rc12; rc12="$(run_step1 "$w")"
+  if [ "$rc12" = "0" ] && diff -q "$w/before.md" "$w/AGENTS.md" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} 12 region-led, §11 below region: no-op (cparx's real shape)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 12 region-led, §11 below region: rc=$rc12 or block moved — would churn cparx"
+    FAIL=$((FAIL+1))
+  fi
+
   # ── Self-conformance — this repo's own §11 sits above its own region ──────
   local sp sr
   sp="$(lineno 'spec-source.*§11' "$REPO_ROOT/AGENTS.md")"
