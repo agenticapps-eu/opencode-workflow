@@ -536,13 +536,29 @@ test_migration_0006() {
   fi
 
   # The invariant 0006 exists to restore: the claim and the §13 binding move
-  # together. A config claiming 0.4.0 without the binding is a FALSE claim.
+  # together. A config claiming a version without the §13 binding that version
+  # requires is a FALSE claim — worse than an honestly stale one.
+  #
+  # Asserted against the trigger skill's claim rather than a hardcoded literal.
+  # Pinning the version here would make this test a tripwire on every absorption
+  # (it was pinned to 0.4.0 and fired on 0007's bump to 0.9.1). The bug 0006
+  # fixed was config-vs-SKILL.md DISAGREEMENT plus a missing binding; that is
+  # what this checks, at whatever version the host currently claims.
+  local claim
+  claim="$(sed -n 's/^implements_spec: //p' "$REPO_ROOT/skills/agentic-apps-workflow/SKILL.md" | head -1)"
+  if [ -z "$claim" ]; then
+    echo "  ${RED}FAIL${RESET} trigger SKILL.md carries no implements_spec — host is unversioned (spec/09)"
+    FAIL=$((FAIL+1)); return
+  fi
+  echo "  ${YELLOW}info${RESET} host claims implements_spec: $claim"
+
   for f in "$snap" "$tpl" "$REPO_ROOT/.planning/config.json"; do
     local label; label="$(basename "$(dirname "$f")")/$(basename "$f")"
-    if jq -e '(.implements_spec == "0.4.0")
-              and (.hooks.per_task.tdd.strengthened_by.skill == "opencode-ts-declare-first")' \
+    if jq -e --arg claim "$claim" \
+         '(.implements_spec == $claim)
+          and (.hooks.per_task.tdd.strengthened_by.skill == "opencode-ts-declare-first")' \
          "$f" >/dev/null 2>&1; then
-      echo "  ${GREEN}PASS${RESET} $label: claim 0.4.0 AND §13 binding present"
+      echo "  ${GREEN}PASS${RESET} $label: claim mirrors SKILL.md ($claim) AND §13 binding present"
       PASS=$((PASS+1))
     else
       echo "  ${RED}FAIL${RESET} $label: claim/binding invariant broken"
@@ -597,6 +613,85 @@ test_migration_0006() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Migration 0007 — absorb core spec 0.4.0 -> 0.9.1.
+#
+# Guards the three requirements this migration exists to satisfy, plus the
+# 0006 invariant it must not break (claim mirrored between SKILL.md and config).
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_migration_0007() {
+  echo ""
+  echo "${YELLOW}=== Migration 0007 — absorb core spec 0.9.1 ===${RESET}"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "  ${YELLOW}SKIP${RESET} jq not available — absorption test not run"
+    SKIP=$((SKIP+1)); return
+  fi
+
+  local skill="$REPO_ROOT/skills/agentic-apps-workflow/SKILL.md"
+  local snap="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/snapshot/planning-config.json"
+  local tpl="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/templates/config-hooks.json"
+
+  # §02 (0.5.0) — plan-review bound on BOTH seeding paths, with the two
+  # sub-requirements §02 makes normative: robust resolution order (a single
+  # mutable pointer is non-conformant, core ADR-0025) and the grandfather rule.
+  for f in "$snap" "$tpl" "$REPO_ROOT/.planning/config.json"; do
+    local label; label="$(basename "$(dirname "$f")")/$(basename "$f")"
+    if jq -e '(.hooks.pre_execution.plan_review.skill == "gsd-review")
+              and ((.hooks.pre_execution.plan_review.phase_resolution_order | length) == 4)
+              and (.hooks.pre_execution.plan_review.grandfather | test("SUMMARY"))' \
+         "$f" >/dev/null 2>&1; then
+      echo "  ${GREEN}PASS${RESET} $label: plan-review bound (resolution order + grandfather)"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} $label: plan-review gate missing or incomplete"
+      FAIL=$((FAIL+1))
+    fi
+  done
+
+  # The claim, and 0006's invariant that the config mirrors it.
+  if grep -q '^implements_spec: 0.9.1$' "$skill" \
+     && jq -e '.implements_spec == "0.9.1"' "$REPO_ROOT/.planning/config.json" >/dev/null 2>&1 \
+     && jq -e '.implements_spec == "0.9.1"' "$snap" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} claim 0.9.1 mirrored across SKILL.md, config, snapshot"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} claim not 0.9.1 or not mirrored (0006 invariant broken)"
+    FAIL=$((FAIL+1))
+  fi
+
+  # §08 (0.9.0) — a snapshot host MUST name its guard in its instruction file,
+  # and the guard it names must actually exist and actually run in CI.
+  if grep -q 'check-snapshot-parity.sh' "$skill" \
+     && [ -f "$REPO_ROOT/migrations/check-snapshot-parity.sh" ] \
+     && grep -q 'check-snapshot-parity.sh' "$REPO_ROOT/.github/workflows/ci.yml"; then
+    echo "  ${GREEN}PASS${RESET} §08: guard named in instruction file, exists, runs in CI"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} §08: guard unnamed, missing, or not wired into CI"
+    FAIL=$((FAIL+1))
+  fi
+
+  # §14 (0.6.0) — declared, since the trigger cannot occur here.
+  if grep -q '^## Spec deltas (spec 0.9.1)' "$skill" && grep -q '§14' "$skill"; then
+    echo "  ${GREEN}PASS${RESET} §14 declared in Spec deltas"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} §14 not declared"
+    FAIL=$((FAIL+1))
+  fi
+
+  # §09 gate count — core 0.9.0 corrected 15 -> 16 (plan-review was never counted).
+  if grep -q '^The 16 gates from$' "$skill"; then
+    echo "  ${GREEN}PASS${RESET} gate count says 16 (§09 fix, core 0.9.0)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} gate count stale — §02 enumerates 16"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Drift test — the scaffolder's SKILL.md version MUST equal the latest
 # migration's to_version (version is migration-coupled).
 # ─────────────────────────────────────────────────────────────────────────────
@@ -642,6 +737,7 @@ test_repo_layout() {
     migrations/0004-revendor-spec-11.md \
     migrations/0005-knowledge-capture.md \
     migrations/0006-fix-config-conformance-claim.md \
+    migrations/0007-absorb-spec-0.9.1.md \
     skills/setup-opencode-agenticapps-workflow/templates/config-knowledge-capture.json \
     skills/setup-opencode-agenticapps-workflow/templates/obsidian-learnings-note.md \
     docs/decisions/0008-knowledge-capture.md \
@@ -696,6 +792,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0006" ]; then
   test_migration_0006
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0007" ]; then
+  test_migration_0007
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then

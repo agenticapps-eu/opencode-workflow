@@ -9,6 +9,77 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-07-15
+
+### Added
+- **Absorbed core spec 0.4.0 → 0.9.1 (migration `0007`).** The conformance claim
+  had drifted five minors behind. Three of the five needed no work; two did.
+
+  | Core spec | Requires | Status before |
+  |---|---|---|
+  | 0.5.0 | §02 `plan-review` pre-execution gate | **Missing** — not bound, not declared |
+  | 0.6.0 | §14 prompt-injection | **Missing** — not wired, not declared N/A |
+  | 0.7.0 | §15 knowledge capture | Already done (`0005`) |
+  | 0.8.0 | §04 addition composition | Already compliant — 13 flags, no additions |
+  | 0.9.0 | §08 guarded snapshot, §09 gate count 15→16 | Guard ran in CI but was **unnamed** |
+  | 0.9.1 | §08 prose fix | No action |
+
+  - **§02 `plan-review` gate bound** to `gsd-review` (this host binds upstream
+    GSD rather than re-porting it). The 16th gate — it fires once a phase has
+    plans and before the first code-touching edit, with `{phase}-REVIEWS.md`
+    from ≥2 external AI reviewers as evidence. §02's two normative
+    sub-requirements are recorded in the gate body: the **phase-resolution
+    order** (a single mutable pointer is non-conformant on its own, core
+    ADR-0025) and the **grandfather rule** (a `*-SUMMARY.md` means the phase
+    already ran, so enabling the gate never retroactively blocks shipped work).
+  - **§14 declared *trivially conformant*.** This scaffolder builds no LLM
+    prompts from non-self-authored values, so §14's trigger cannot occur; §09
+    requires only that the host say so. Downstream coverage is delegated to
+    `injection-guard` (agenticapps-observability), same basis as §10. The
+    `security` gate now carries §02's v0.6.0 obligation to record §14 evidence
+    on LLM-scoped changesets.
+  - **§08 guard named** in the instruction file: `migrations/check-snapshot-parity.sh`,
+    run in CI on every push. The guard already existed — §08 v0.9.0 requires the
+    host to *name* it, which makes the claim checkable by a reader.
+  - **§09 gate count corrected** 15 → 16. The trigger skill had said "The 15
+    gates from spec/02" since the fork; the uncounted 16th was `plan-review`
+    itself — the gate this release binds. Core fixed the same off-by-one in
+    §09 at 0.9.0.
+
+### Fixed
+- **The 0.4.0 claim was itself the violation.** Core spec 0.9.0 amended §08 so a
+  guarded snapshot install is conformant — a change written *because of* this
+  host: the 0.9.0 changelog names `opencode-workflow` (ADR-0007) and
+  `claude-workflow` as the two hosts that independently shipped snapshot
+  installs against a §08 that required replay, and states both "were
+  non-conformant on a MUST". While this host cited 0.4.0, its own install
+  strategy was forbidden by the §08 of the version it claimed. Moving to 0.9.1
+  **retires an existing violation** rather than taking on new obligations.
+- **`test_migration_0006` was a tripwire on its own successor.** It pinned
+  `implements_spec == "0.4.0"` as a literal, so `0007`'s bump to 0.9.1 failed it
+  — the test would have fired on every future absorption. Rewritten to assert
+  the actual invariant (the config mirrors *whatever* the trigger skill claims,
+  and the §13 binding is present) at whatever version the host is at. Verified
+  it still catches both halves of the original defect: a config claim that
+  disagrees with SKILL.md, and a missing §13 binding.
+
+### Notes
+- **`implements_spec` is the host's claim, not a per-skill stamp.** Only the
+  primary instruction file's citation is normative (spec/09), mirrored into
+  `.planning/config.json` per `0006`'s invariant. The `opencode-*` gate skills
+  cite the version of the **contract they implement** and do NOT move in
+  lockstep — `opencode-ts-declare-first` stays at `0.4.0` because §13 is still a
+  0.4.0 section. This matches the reference host: `claude-workflow` cites 0.9.0
+  on its trigger and 0.4.0 on its `ts-declare-first`.
+- **No canonical prose changed.** §04's block is byte-identical to core's; core
+  v0.8.0 changed only the rules *around* it, and this host adds no red flags, so
+  it was already compliant.
+- Not in scope: §13's implicit trigger (SHOULD/MAY throughout, and this is not a
+  TypeScript project), and a *programmatic* gate for `plan-review` (§02 says
+  hosts bind the skill and **SHOULD** enforce programmatically; this host's
+  hooks are prose the agent executes — there is no shell hook layer — so the
+  binding is declarative, consistent with every other gate here).
+
 ## [0.3.1] — 2026-07-14
 
 ### Fixed

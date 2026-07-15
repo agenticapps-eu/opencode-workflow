@@ -1,8 +1,23 @@
 {
   "$schema": "https://github.com/agenticapps-eu/opencode-workflow/blob/main/templates/config-hooks.schema.json",
-  "implements_spec": "0.4.0",
+  "implements_spec": "0.9.1",
   "host": "opencode",
   "hooks": {
+    "pre_execution": {
+      "plan_review": {
+        "skill": "gsd-review",
+        "fires_when": "phase has one or more *-PLAN.md and no *-SUMMARY.md exists for the resolved phase — fires before the first code-touching execution edit",
+        "evidence": "{phase}-REVIEWS.md in the phase directory, carrying independent plan review from at least two external AI reviewers",
+        "phase_resolution_order": [
+          "explicit phase pointer",
+          "workflow state (current_phase)",
+          "newest plan artifact by mtime",
+          "fail-open (allow)"
+        ],
+        "grandfather": "a *-SUMMARY.md for the resolved phase means the phase already executed — the gate allows the edit, so enabling enforcement never retroactively blocks work shipped before the gate functioned",
+        "implements_spec": "0.5.0"
+      }
+    },
     "pre_phase": {
       "brainstorm_ui": {
         "skill": "superpowers:brainstorming",
