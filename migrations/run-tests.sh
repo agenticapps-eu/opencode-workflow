@@ -760,6 +760,182 @@ test_migration_0008() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Migration 0009 — Region-aware §11 placement
+#
+# The §11 injector anchored on the first '## ' heading. In an AGENTS.md that
+# leads with a GitNexus block, the first '## ' is '## Always Do' — inside
+# <!-- gitnexus:start -->…<!-- gitnexus:end -->. The block lands in the region
+# and the next `gitnexus analyze` regenerates the region and eats it silently.
+# Recovery is closed (0001/0004 never replay), so this fixes forward.
+#
+# These fixtures EXTRACT and EXECUTE the migration's own Step 1 shell rather
+# than copying it. A fixture that inlines a copy tests the copy, and the two
+# drift silently — which is exactly what run-tests.sh:119 did for 0001's awk.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Extract a sentinel-delimited region from a migration document.
+# Sentinels are `# name:begin` / `# name:end` — inert comments in both bash and
+# awk, so they live inside the migration's real shell without altering it.
+extract_region() { # $1 doc  $2 sentinel-name  $3 out-file
+  awk -v b="# $2:begin" -v e="# $2:end" '
+    index($0, b) { f=1; next }
+    index($0, e) { f=0 }
+    f { print }
+  ' "$1" > "$3"
+}
+
+test_migration_0009() {
+  echo ""
+  echo "${YELLOW}=== Migration 0009 — region-aware §11 placement ===${RESET}"
+
+  local doc="$REPO_ROOT/migrations/0009-spec-11-region-aware-placement.md"
+  local mirror="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+
+  if [ ! -f "$doc" ] || [ ! -f "$mirror" ]; then
+    echo "  ${RED}FAIL${RESET} 0009 document or §11 mirror missing"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+
+  local step1="$tmp/step1.sh"
+  extract_region "$doc" "step1" "$step1"
+
+  # Extractor shape assertion — fail LOUDLY if it locked onto the wrong fence.
+  # Without this, a mis-extraction degrades into fixtures that vacuously pass.
+  if [ -s "$step1" ] \
+     && grep -q 'MIRROR=' "$step1" \
+     && grep -q 'AGENTS.md' "$step1" \
+     && grep -q 'awk' "$step1" \
+     && ! grep -q '```' "$step1"; then
+    echo "  ${GREEN}PASS${RESET} extractor locked onto 0009's Step 1 shell (shape ok)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} extractor did NOT lock onto Step 1's shell — fixtures below are meaningless"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  # Redirect the config dir at a temp mirror so the extracted shell resolves
+  # $MIRROR exactly as it would inside a real project.
+  local cfgmir="$tmp/cfg/skills/setup-opencode-agenticapps-workflow/templates/spec-mirrors"
+  mkdir -p "$cfgmir"
+  cp "$mirror" "$cfgmir/11-coding-discipline-0.4.0.md"
+
+  run_step1() { # $1 workdir -> echoes exit code
+    ( cd "$1" && OPENCODE_CONFIG_DIR="$1/../cfg" bash "$step1" >"$1/step1.log" 2>&1; echo $? )
+  }
+  lineno() { grep -n "$1" "$2" 2>/dev/null | head -1 | cut -d: -f1; }
+
+  # ── Fixture 01 — gitnexus-led file, §11 absent (state C) ──────────────────
+  # The regression shape: first '## ' is INSIDE the region.
+  local w="$tmp/01"; mkdir -p "$w"
+  printf '# AGENTS.md — demo\n\n<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n## Always Do\n\n- use the graph\n<!-- gitnexus:end -->\n\n## Project Notes\n\nbody\n' > "$w/AGENTS.md"
+  run_step1 "$w" >/dev/null
+  local p rs
+  p="$(lineno 'spec-source' "$w/AGENTS.md")"; rs="$(lineno 'gitnexus:start' "$w/AGENTS.md")"
+  if [ -n "$p" ] && [ -n "$rs" ] && [ "$p" -lt "$rs" ]; then
+    echo "  ${GREEN}PASS${RESET} 01 gitnexus-led: §11 injected ABOVE the region (L$p < L$rs)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 01 gitnexus-led: §11 at L${p:-none}, region starts L${rs:-none} — inside/absent"
+    FAIL=$((FAIL+1))
+  fi
+
+  # …and it must survive the region being regenerated (what `gitnexus analyze` does).
+  awk '/^<!-- gitnexus:start -->$/{print; print "# GitNexus — regenerated"; skip=1; next}
+       /^<!-- gitnexus:end -->$/{skip=0}
+       !skip {print}' "$w/AGENTS.md" > "$w/regen.md"
+  if grep -q 'Coding Discipline (NON-NEGOTIABLE)' "$w/regen.md"; then
+    echo "  ${GREEN}PASS${RESET} 01 §11 survives a modelled region regeneration"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 01 §11 destroyed by region regeneration"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Fixture 02 — §11 already INSIDE a region (state B) ────────────────────
+  w="$tmp/02"; mkdir -p "$w"
+  {
+    printf '# AGENTS.md — demo\n\n<!-- gitnexus:start -->\n# GitNexus\n\n'
+    printf '<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->\n'
+    cat "$mirror"
+    printf '\n## Always Do\n\n- stuff\n<!-- gitnexus:end -->\n\n## Project Notes\n\nbody\n'
+  } > "$w/AGENTS.md"
+  run_step1 "$w" >/dev/null
+  p="$(lineno 'spec-source' "$w/AGENTS.md")"; rs="$(lineno 'gitnexus:start' "$w/AGENTS.md")"
+  local n; n="$(grep -c 'spec-source' "$w/AGENTS.md")"
+  if [ -n "$p" ] && [ -n "$rs" ] && [ "$p" -lt "$rs" ] && [ "$n" -eq 1 ]; then
+    echo "  ${GREEN}PASS${RESET} 02 inside-region: §11 moved above the region, present exactly once"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 02 inside-region: §11 L${p:-none} vs region L${rs:-none}, count=$n (want above, count 1)"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Fixture 03 — healthy file (state A) → byte-identical, zero churn ──────
+  # Uses this repo's REAL AGENTS.md: the strongest available no-op evidence.
+  w="$tmp/03"; mkdir -p "$w"
+  cp "$REPO_ROOT/AGENTS.md" "$w/AGENTS.md"
+  run_step1 "$w" >/dev/null
+  if diff -q "$REPO_ROOT/AGENTS.md" "$w/AGENTS.md" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} 03 healthy: real AGENTS.md byte-identical (zero churn)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 03 healthy: Step 1 churned an already-correct AGENTS.md"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Fixture 04 — no AGENTS.md → informational skip, exit 0 ────────────────
+  w="$tmp/04"; mkdir -p "$w"
+  local rc; rc="$(run_step1 "$w")"
+  if [ "$rc" = "0" ] && grep -q 'no AGENTS.md' "$w/step1.log"; then
+    echo "  ${GREEN}PASS${RESET} 04 absent AGENTS.md: informational skip, exit 0"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 04 absent AGENTS.md: rc=$rc (want 0 + skip notice)"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Fixture 05 — hand-pasted §11, no provenance (state D) → exit 3 ────────
+  w="$tmp/05"; mkdir -p "$w"
+  printf '# Title\n\n## Coding Discipline (NON-NEGOTIABLE)\n\nhand-written\n' > "$w/AGENTS.md"
+  cp "$w/AGENTS.md" "$w/before.md"
+  rc="$(run_step1 "$w")"
+  if [ "$rc" = "3" ] && diff -q "$w/before.md" "$w/AGENTS.md" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} 05 unmanaged §11: refused with exit 3, file untouched"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 05 unmanaged §11: rc=$rc (want 3) or file was modified"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Fixture 06 — no '## ', no region → EOF append ─────────────────────────
+  w="$tmp/06"; mkdir -p "$w"
+  printf '# Only a title\n\nsome body\n' > "$w/AGENTS.md"
+  run_step1 "$w" >/dev/null
+  if grep -q 'spec-source' "$w/AGENTS.md" && grep -q 'Coding Discipline' "$w/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} 06 no heading/region: §11 appended at EOF"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 06 no heading/region: §11 not appended"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Self-conformance — this repo's own §11 sits above its own region ──────
+  local sp sr
+  sp="$(lineno 'spec-source.*§11' "$REPO_ROOT/AGENTS.md")"
+  sr="$(lineno 'gitnexus:start' "$REPO_ROOT/AGENTS.md")"
+  if [ -n "$sp" ] && { [ -z "$sr" ] || [ "$sp" -lt "$sr" ]; }; then
+    echo "  ${GREEN}PASS${RESET} self-conformance: this repo's §11 (L$sp) is above its region (L${sr:-none})"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} self-conformance: §11 L${sp:-none} is not above region L${sr:-none}"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Drift test — the scaffolder's SKILL.md version MUST equal the latest
 # migration's to_version (version is migration-coupled).
 # ─────────────────────────────────────────────────────────────────────────────
@@ -869,6 +1045,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0008" ]; then
   test_migration_0008
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0009" ]; then
+  test_migration_0009
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then
