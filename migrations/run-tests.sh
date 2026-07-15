@@ -1080,6 +1080,42 @@ test_migration_0009() {
     FAIL=$((FAIL+1))
   fi
 
+  # ── Fixture 10 — provenance only QUOTED in prose, no real block ───────────
+  # All three matchers must agree on what counts as the provenance line. An
+  # unanchored shell matcher reads "block present" off an indented example while
+  # the whole-line awk predicates find nothing — so the heal is skipped and §11
+  # is never injected into a file that has none.
+  w="$tmp/10"; mkdir -p "$w"
+  printf '# Title\n\nExample of provenance:\n\n    <!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->\n\n## Notes\n\nbody\n' > "$w/AGENTS.md"
+  local rc10; rc10="$(run_step1 "$w")"
+  if [ "$rc10" = "0" ] && grep -q '^## Coding Discipline (NON-NEGOTIABLE)$' "$w/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} 10 quoted provenance: §11 still injected (matchers agree)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 10 quoted provenance: rc=$rc10, §11 not injected — a quoted line read as a real block"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Fixture 11 — healthy block, non-canonical position → left alone ───────
+  # Pins the documented Surgical-Changes guarantee: only the in-region case is a
+  # defect. A block that is merely lower than the anchor must not be moved.
+  w="$tmp/11"; mkdir -p "$w"
+  {
+    printf '# Title\n\n## Project Notes\n\nbody\n\n'
+    printf '<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->\n'
+    cat "$mirror"
+    printf '\n## Trailing\n\nmore\n'
+  } > "$w/AGENTS.md"
+  cp "$w/AGENTS.md" "$w/before.md"
+  local rc11; rc11="$(run_step1 "$w")"
+  if [ "$rc11" = "0" ] && diff -q "$w/before.md" "$w/AGENTS.md" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} 11 healthy non-canonical: left untouched (no gratuitous churn)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 11 healthy non-canonical: rc=$rc11 or block was moved — churns project files"
+    FAIL=$((FAIL+1))
+  fi
+
   # ── Self-conformance — this repo's own §11 sits above its own region ──────
   local sp sr
   sp="$(lineno 'spec-source.*§11' "$REPO_ROOT/AGENTS.md")"

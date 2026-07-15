@@ -152,7 +152,13 @@ because it is a two-part condition).
 ```bash
 # step1:begin
 MIRROR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/setup-opencode-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
-PROV_RE='<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->'
+# Anchored, and identical to the pattern the awk predicates below use. An
+# unanchored matcher also matches prose that merely QUOTES the provenance line
+# (e.g. indented inside a fenced example): the shell would then read "block
+# present" while the awk predicates, which require a whole line, find nothing —
+# so the heal is skipped and §11 is never injected. All three matchers must
+# agree on exactly what counts as the provenance line.
+PROV_RE='^<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->$'
 
 if [ ! -f AGENTS.md ]; then
   echo "0009: no AGENTS.md in this project — nothing to place; skipping Step 1."
@@ -186,7 +192,7 @@ fi
 # leaving the block exactly where the next `gitnexus analyze` eats it.
 block_in_region() {
   awk '
-    /^<!-- spec-source: agenticapps-workflow-core@[^ ]+ §11 -->$/ { p=NR }
+    /^<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->$/ { p=NR }
     /^<!-- gitnexus:start -->$/ { rs=NR; open=1 }
     /^<!-- gitnexus:end -->$/   { if (open && p && p > rs && p < NR) inreg=1; open=0 }
     END { if (open && p && p > rs) inreg=1; exit !inreg }
@@ -200,7 +206,7 @@ block_in_region() {
 # Fail closed instead: this is state D's class — a block outside this
 # migration's management, which it must never silently overwrite.
 if grep -qE "$PROV_RE" AGENTS.md && ! awk '
-    /^<!-- spec-source: agenticapps-workflow-core@[^ ]+ §11 -->$/ { f=1; next }
+    /^<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->$/ { f=1; next }
     f && /session-level discipline the model brings to every diff\.$/ { found=1; exit }
     END { exit !found }
   ' AGENTS.md; then
@@ -227,7 +233,7 @@ fi
 # No-op in state C; in state B this is the "move" half of the heal.
 awk '
 # strip-rule:begin
-  /^<!-- spec-source: agenticapps-workflow-core@[^ ]+ §11 -->$/ {inblk=1; next}
+  /^<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->$/ {inblk=1; next}
   inblk && /session-level discipline the model brings to every diff\.$/ {inblk=0; skipblank=1; next}
   inblk {next}
   skipblank && /^$/ {skipblank=0; next}
@@ -329,7 +335,7 @@ grep -qE '<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->' AG
 # An unterminated region counts as open to EOF — otherwise eating the end marker
 # would make this check pass *because* the file was damaged.
 awk '
-  /^<!-- spec-source: agenticapps-workflow-core@[^ ]+ §11 -->$/ { p=NR }
+  /^<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->$/ { p=NR }
   /^<!-- gitnexus:start -->$/ { rs=NR; open=1 }
   /^<!-- gitnexus:end -->$/   { if (open && p && p > rs && p < NR) inreg=1; open=0 }
   END { if (open && p && p > rs) inreg=1
