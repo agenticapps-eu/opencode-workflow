@@ -126,11 +126,12 @@ test_migration_0001() {
 
   # Shape assertion — a mis-extraction must fail loudly, not vacuously pass.
   if [ -s "$step1_0001" ] \
+     && bash -n "$step1_0001" 2>/dev/null \
      && grep -q 'MIRROR=' "$step1_0001" \
      && grep -q 'awk -v mirror=' "$step1_0001" \
      && grep -q 'AGENTS.md' "$step1_0001" \
      && ! grep -q '```' "$step1_0001"; then
-    echo "  ${GREEN}PASS${RESET} extractor locked onto 0001's Step 1 shell (shape ok)"
+    echo "  ${GREEN}PASS${RESET} extractor locked onto 0001's Step 1 shell (shape ok, parses clean)"
     PASS=$((PASS+1))
   else
     echo "  ${RED}FAIL${RESET} extractor did NOT lock onto 0001's Step 1 shell"
@@ -796,10 +797,14 @@ test_migration_0008() {
 # Sentinels are `# name:begin` / `# name:end` — inert comments in both bash and
 # awk, so they live inside the migration's real shell without altering it.
 # Preferred for migrations written after 0009.
+# Sentinels must match a WHOLE line. A substring match re-opens capture on any
+# prose that merely mentions the sentinel — e.g. the migration's own Testing
+# section, which names `# step1:begin` inline — and silently swallows the rest of
+# the document into the extracted script. Capture stops at the first :end.
 extract_region() { # $1 doc  $2 sentinel-name  $3 out-file
-  awk -v b="# $2:begin" -v e="# $2:end" '
-    index($0, b) { f=1; next }
-    index($0, e) { f=0 }
+  awk -v name="$2" '
+    $0 ~ ("^[[:space:]]*# " name ":begin[[:space:]]*$") { f=1; next }
+    $0 ~ ("^[[:space:]]*# " name ":end[[:space:]]*$")   { if (f) exit }
     f { print }
   ' "$1" > "$3"
 }
@@ -836,14 +841,20 @@ test_migration_0009() {
   local step1="$tmp/step1.sh"
   extract_region "$doc" "step1" "$step1"
 
-  # Extractor shape assertion — fail LOUDLY if it locked onto the wrong fence.
+  # Extractor shape assertion — fail LOUDLY if it locked onto the wrong region.
   # Without this, a mis-extraction degrades into fixtures that vacuously pass.
+  #
+  # `bash -n` is the load-bearing check, not a formality: an over-capture that
+  # ran past the sentinel and swallowed the document's prose still contained
+  # every marker below and passed the grep checks alone. Syntax-checking the
+  # result is what actually proves the extraction is a script and nothing else.
   if [ -s "$step1" ] \
+     && bash -n "$step1" 2>/dev/null \
      && grep -q 'MIRROR=' "$step1" \
      && grep -q 'AGENTS.md' "$step1" \
      && grep -q 'awk' "$step1" \
      && ! grep -q '```' "$step1"; then
-    echo "  ${GREEN}PASS${RESET} extractor locked onto 0009's Step 1 shell (shape ok)"
+    echo "  ${GREEN}PASS${RESET} extractor locked onto 0009's Step 1 shell (shape ok, parses clean)"
     PASS=$((PASS+1))
   else
     echo "  ${RED}FAIL${RESET} extractor did NOT lock onto Step 1's shell — fixtures below are meaningless"
@@ -865,14 +876,17 @@ test_migration_0009() {
   # The regression shape: first '## ' is INSIDE the region.
   local w="$tmp/01"; mkdir -p "$w"
   printf '# AGENTS.md — demo\n\n<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n## Always Do\n\n- use the graph\n<!-- gitnexus:end -->\n\n## Project Notes\n\nbody\n' > "$w/AGENTS.md"
-  run_step1 "$w" >/dev/null
+  local rc01; rc01="$(run_step1 "$w")"
   local p rs
   p="$(lineno 'spec-source' "$w/AGENTS.md")"; rs="$(lineno 'gitnexus:start' "$w/AGENTS.md")"
-  if [ -n "$p" ] && [ -n "$rs" ] && [ "$p" -lt "$rs" ]; then
-    echo "  ${GREEN}PASS${RESET} 01 gitnexus-led: §11 injected ABOVE the region (L$p < L$rs)"
+  # rc is asserted, not discarded: a Step 1 that produces the right file while
+  # exiting non-zero means the extracted shell is running something it should
+  # not, and that is how a bad extraction hides.
+  if [ "$rc01" = "0" ] && [ -n "$p" ] && [ -n "$rs" ] && [ "$p" -lt "$rs" ]; then
+    echo "  ${GREEN}PASS${RESET} 01 gitnexus-led: §11 injected ABOVE the region (L$p < L$rs), exit 0"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} 01 gitnexus-led: §11 at L${p:-none}, region starts L${rs:-none} — inside/absent"
+    echo "  ${RED}FAIL${RESET} 01 gitnexus-led: §11 at L${p:-none}, region starts L${rs:-none}, rc=$rc01"
     FAIL=$((FAIL+1))
   fi
 
@@ -896,14 +910,14 @@ test_migration_0009() {
     cat "$mirror"
     printf '\n## Always Do\n\n- stuff\n<!-- gitnexus:end -->\n\n## Project Notes\n\nbody\n'
   } > "$w/AGENTS.md"
-  run_step1 "$w" >/dev/null
+  local rc02; rc02="$(run_step1 "$w")"
   p="$(lineno 'spec-source' "$w/AGENTS.md")"; rs="$(lineno 'gitnexus:start' "$w/AGENTS.md")"
   local n; n="$(grep -c 'spec-source' "$w/AGENTS.md")"
-  if [ -n "$p" ] && [ -n "$rs" ] && [ "$p" -lt "$rs" ] && [ "$n" -eq 1 ]; then
+  if [ "$rc02" = "0" ] && [ -n "$p" ] && [ -n "$rs" ] && [ "$p" -lt "$rs" ] && [ "$n" -eq 1 ]; then
     echo "  ${GREEN}PASS${RESET} 02 inside-region: §11 moved above the region, present exactly once"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} 02 inside-region: §11 L${p:-none} vs region L${rs:-none}, count=$n (want above, count 1)"
+    echo "  ${RED}FAIL${RESET} 02 inside-region: §11 L${p:-none} vs region L${rs:-none}, count=$n, rc=$rc02"
     FAIL=$((FAIL+1))
   fi
 
@@ -911,12 +925,12 @@ test_migration_0009() {
   # Uses this repo's REAL AGENTS.md: the strongest available no-op evidence.
   w="$tmp/03"; mkdir -p "$w"
   cp "$REPO_ROOT/AGENTS.md" "$w/AGENTS.md"
-  run_step1 "$w" >/dev/null
-  if diff -q "$REPO_ROOT/AGENTS.md" "$w/AGENTS.md" >/dev/null 2>&1; then
+  local rc03; rc03="$(run_step1 "$w")"
+  if [ "$rc03" = "0" ] && diff -q "$REPO_ROOT/AGENTS.md" "$w/AGENTS.md" >/dev/null 2>&1; then
     echo "  ${GREEN}PASS${RESET} 03 healthy: real AGENTS.md byte-identical (zero churn)"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} 03 healthy: Step 1 churned an already-correct AGENTS.md"
+    echo "  ${RED}FAIL${RESET} 03 healthy: Step 1 churned an already-correct AGENTS.md (rc=$rc03)"
     FAIL=$((FAIL+1))
   fi
 
@@ -947,12 +961,12 @@ test_migration_0009() {
   # ── Fixture 06 — no '## ', no region → EOF append ─────────────────────────
   w="$tmp/06"; mkdir -p "$w"
   printf '# Only a title\n\nsome body\n' > "$w/AGENTS.md"
-  run_step1 "$w" >/dev/null
-  if grep -q 'spec-source' "$w/AGENTS.md" && grep -q 'Coding Discipline' "$w/AGENTS.md"; then
+  local rc06; rc06="$(run_step1 "$w")"
+  if [ "$rc06" = "0" ] && grep -q 'spec-source' "$w/AGENTS.md" && grep -q 'Coding Discipline' "$w/AGENTS.md"; then
     echo "  ${GREEN}PASS${RESET} 06 no heading/region: §11 appended at EOF"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} 06 no heading/region: §11 not appended"
+    echo "  ${RED}FAIL${RESET} 06 no heading/region: §11 not appended (rc=$rc06)"
     FAIL=$((FAIL+1))
   fi
 
