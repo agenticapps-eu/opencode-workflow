@@ -14,7 +14,7 @@ build-out (`docs/dogfood-2026-05-10.md`).
 ## Conformance claim
 
 `opencode-workflow` claims **`full` conformance** to
-`agenticapps-workflow-core` v0.4.0 per spec/09 because:
+`agenticapps-workflow-core` v0.9.1 per spec/09 because:
 
 1. The trigger skill `agentic-apps-workflow` reproduces the **five**
    canonical-prose blocks verbatim — Step 0 Commitment Ritual,
@@ -34,13 +34,38 @@ build-out (`docs/dogfood-2026-05-10.md`).
      Surgical scope per §12 (no bulk conversion required).
    - **§13 (declare-first TS)** — `opencode-ts-declare-first` skill
      strengthens the `tdd` gate for new TS modules.
+   - **§08 (migration format, v0.9.0)** — setup installs a prebuilt
+     snapshot rather than replaying `0000`→latest (ADR-0007). §08 makes
+     that conformant *provided a drift guard proves the snapshot equals
+     the chain's end state*, and requires the host to name the guard in
+     its instruction file. Named:
+     **`migrations/check-snapshot-parity.sh`**, run in CI on every push
+     (`.github/workflows/ci.yml`, step *Snapshot drift guard*). An
+     unguarded snapshot would be non-conformant. Before v0.9.0, §08
+     required replay outright — this scaffolder's snapshot install was
+     non-conformant on a MUST for as long as it cited a pre-0.9.0
+     version.
+   - **§14 (prompt-injection, v0.6.0)** — *trivially conformant*: this
+     scaffolder builds no LLM prompts from non-self-authored values, so
+     the trigger cannot occur; §09 requires only that the host say so.
+     Downstream coverage is delegated to `injection-guard`
+     (agenticapps-observability), same basis as §10. The `security`
+     gate carries the §02 obligation to record §14 evidence on
+     LLM-scoped changesets.
 3. Host-specific bindings exist for every gate **whose trigger
    condition can occur in this scaffolder's project type**. Gates
    whose triggers cannot occur are listed under "Spec Deltas" with
    the rationale per spec/09.
 4. `skills/agentic-apps-workflow/SKILL.md` carries
-   `implements_spec: 0.4.0` in frontmatter; the AgenticApps gate skills
-   shipped by this repo (`opencode-*`) all cite `implements_spec: 0.4.0`.
+   `implements_spec: 0.9.1` in frontmatter — this is the host's
+   conformance claim, and it is the only normative carrier per spec/09
+   ("the host's primary instruction file"). `.planning/config.json`
+   mirrors it (the invariant migration `0006` restored). The individual
+   `opencode-*` gate skills cite the spec version of the **contract they
+   implement**, not the host's claim, so they do not move in lockstep:
+   `opencode-ts-declare-first` stays at `0.4.0` because §13 is still a
+   0.4.0 section. (This matches the reference host — `claude-workflow`
+   cites 0.9.0 on its trigger and 0.4.0 on its `ts-declare-first`.)
    The GSD entry-point and Superpowers discipline skills are bound
    upstream (see `docs/BINDING.md`), not re-shipped here.
 5. Each phase produces CONTEXT.md / PLAN.md / VERIFICATION.md /
@@ -59,6 +84,7 @@ build-out (`docs/dogfood-2026-05-10.md`).
 | `brainstorm-architecture` | `superpowers:brainstorming` (Superpowers, architecture mode) | Adding a new skill, template, or migration | The Phase 0 ADR set is the reference shape |
 | `tdd` | `superpowers:test-driven-development` (Superpowers) | Any task adding logic to `install.sh` or `migrations/run-tests.sh` | Markdown content (skills, templates, ADRs) does not require TDD |
 | `tdd` (new TS module) | `opencode-ts-declare-first` | A new TypeScript module's public API surface (spec §13) | Strengthens `tdd`: three atomic commits `declare(ts):` → `test(ts):` (RED) → `feat(ts):` (GREEN). Does not fire on this markdown scaffolder; bound for downstream TS projects |
+| `plan-review` | `gsd-review` (GSD, upstream) | A phase has one or more `*-PLAN.md` and no `*-SUMMARY.md` — before the first code-touching edit | Evidence: `{phase}-REVIEWS.md` from ≥2 external AI reviewers. Resolution order and grandfather rule per spec §02 / core ADR-0025 |
 | `verification` | `superpowers:verification-before-completion` (Superpowers) | Always — every PR | Evidence shapes here are typically grep results, file existence, and `run-tests.sh` output |
 | `spec-review` | `opencode-spec-review` | Always — every PR | Stage 1 of two-stage review |
 | `code-review` | `superpowers:requesting-code-review` (Superpowers) | Always — every PR | Stage 2; `opencode run` child process per ADR-0002 |

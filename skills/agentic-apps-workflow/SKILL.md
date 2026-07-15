@@ -1,7 +1,7 @@
 ---
 name: agentic-apps-workflow
-version: 0.3.1
-implements_spec: 0.4.0
+version: 0.4.0
+implements_spec: 0.9.1
 description: |
   Enforces the AgenticApps spec-first workflow on opencode. This skill MUST
   activate whenever the user asks opencode to implement, build, code, fix,
@@ -20,7 +20,7 @@ description: |
 This is the trigger skill for the AgenticApps spec-first workflow on
 the opencode host. It is a `full`-conformance implementation of
 [`agenticapps-workflow-core`](https://github.com/agenticapps-eu/agenticapps-workflow-core)
-v0.4.0. The frontmatter `implements_spec: 0.4.0` is the conformance
+v0.9.1. The frontmatter `implements_spec: 0.9.1` is the conformance
 citation per spec/09.
 
 The body of this skill follows the structure required by the core
@@ -133,7 +133,7 @@ mark any task complete without verification evidence (per spec/06).
 
 ## Step 3 — Gate-to-skill bindings
 
-The 15 gates from
+The 16 gates from
 [spec/02-hook-taxonomy.md](https://github.com/agenticapps-eu/agenticapps-workflow-core/blob/main/spec/02-hook-taxonomy.md)
 are bound on the opencode host as follows. This table is the host's
 binding contract for `full` conformance per spec/09.
@@ -146,6 +146,12 @@ binding contract for `full` conformance per spec/09.
 | `brainstorm-architecture` | `superpowers:brainstorming` | |
 | `design-shotgun` | `opencode-design-shotgun` | Generates ≥3 visual variants and writes them into `CONTEXT.md` |
 | `design-critique` | `opencode-design-critique` | Impeccable-style critique against an existing `UI-SPEC.md` |
+
+### Pre-execution
+
+| Gate | Bound skill | Notes |
+|---|---|---|
+| `plan-review` | `gsd-review` | Fires once a phase has one or more `*-PLAN.md`, before the first code-touching execution edit. Evidence is `{phase}-REVIEWS.md` carrying independent review from **at least two external AI reviewers** — adversarial review of the plan before any code exists. Per spec §02 the gate resolves the active phase in this order: explicit phase pointer → workflow state (`current_phase`) → newest plan artifact by mtime → fail-open (allow); a single mutable pointer alone is non-conformant (core ADR-0025). It **grandfathers** already-executed phases: when a `*-SUMMARY.md` exists for the resolved phase the edit is allowed, so enabling the gate never retroactively blocks work shipped before it functioned. |
 
 ### Per-task / execution
 
@@ -162,7 +168,7 @@ binding contract for `full` conformance per spec/09.
 |---|---|---|
 | `spec-review` | `opencode-spec-review` | Stage 1; writes `## Stage 1 — Spec compliance` into `REVIEW.md` |
 | `code-review` | `superpowers:requesting-code-review` | Stage 2; spawns an independent reviewer via `opencode run --model …` per [ADR-0002](../../docs/decisions/0002-stage2-independent-reviewer-on-codex.md) |
-| `security` | `opencode-cso` | OWASP-aligned security audit; writes `SECURITY.md` |
+| `security` | `opencode-cso` | OWASP-aligned security audit; writes `SECURITY.md`. Per spec §02 (v0.6.0) an LLM-scoped changeset MUST also record **§14 prompt-injection conformance evidence** for the affected surface — delegated to `injection-guard` (agenticapps-observability), same basis as §10. Cannot fire on this scaffolder (no LLM prompt-building path — see Spec deltas); bound for downstream projects |
 | `database-security` | `opencode-database-sentinel-audit` | Same skill, "in-phase" mode |
 | `qa` | `opencode-qa` | Phase-level browser-driven QA mode (distinct from `ui-preview` mode) |
 | `impeccable-audit` | `opencode-impeccable-audit` | Visual quality audit per [ADR-0011](https://github.com/agenticapps-eu/agenticapps-workflow-core/blob/main/adrs/0011-impeccable-design-quality-gate.md) |
@@ -182,6 +188,57 @@ A gate fires when its trigger condition (per spec/02) is met. The
 trigger skill does not pre-fire gates whose conditions cannot be met
 (e.g. `database-security` is not invoked on a phase that does not
 touch DB code).
+
+---
+
+## Setup strategy — guarded snapshot (spec §08)
+
+Setup installs a **prebuilt snapshot**, not a `0000`→latest migration
+replay (ADR-0007). Spec §08 (v0.9.0) makes this a conformant strategy
+**provided a drift guard proves the snapshot equals the chain's end
+state**, and requires the host to name that guard here:
+
+> **Guard: `migrations/check-snapshot-parity.sh`.** It runs in CI on
+> every push (`.github/workflows/ci.yml`, step *Snapshot drift guard*)
+> and fails the build when `snapshot/` and the migration chain's end
+> state disagree.
+
+The guard is the load-bearing half of the claim. A guarded snapshot is
+not a second source of truth — it is a build artifact of the one in
+`migrations/`, and the guard is what makes that checkable rather than
+merely asserted. An **unguarded** snapshot is non-conformant. The
+update flow is unaffected: it consumes the single `migrations/`
+directory directly.
+
+---
+
+## Spec deltas (spec 0.9.1)
+
+Per core spec §09, a host names every requirement it does not satisfy
+verbatim, with rationale. Audited 2026-07-15.
+
+- **§14 prompt-injection — trivially conformant.** This scaffolder
+  builds no LLM prompts from non-self-authored values, so §14's trigger
+  condition cannot occur; §09 requires only that the host say so. The
+  skills this repo ships are prose the agent reads, not prompts
+  assembled from untrusted input. Downstream projects that *do* build
+  prompts get §14 coverage via the `injection-guard` skill
+  (agenticapps-observability, `implements_spec: 0.6.0`), on the same
+  delegation basis as §10 — see [ADR-0005](../../docs/decisions/0005-adopt-observability-architecture.md).
+- **Eight spec/02 gates whose trigger cannot occur here** (`brainstorm-ui`,
+  `design-shotgun`, `design-critique`, `ui-preview`, `qa`,
+  `impeccable-audit`, `database-security`, `db-pre-launch-audit`) are
+  bound for downstream projects but never fire on this UI-less,
+  DB-less scaffolder. Enumerated with rationale in
+  [docs/ENFORCEMENT-PLAN.md](../../docs/ENFORCEMENT-PLAN.md#spec-deltas--gates-whose-trigger-cannot-occur).
+  Per spec/09 an omission whose trigger cannot occur does not downgrade
+  `full` to `partial`.
+- **§10 observability — satisfied by delegation**, not omitted: the
+  generator obligation is met by the standalone
+  `agenticapps-observability` skill consumed via its opencode install
+  surface. A satisfied MUST per §09, not a delta — recorded here only
+  because readers look for it. See
+  [docs/observability-delegation.md](../../docs/observability-delegation.md).
 
 ---
 
