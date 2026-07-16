@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **opencode-workflow** (372 symbols, 372 relationships, 0 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **opencode-workflow** (725 symbols, 749 relationships, 0 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -41,3 +41,10 @@ This project is indexed by GitNexus as **opencode-workflow** (372 symbols, 372 r
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
+
+## Reindexing
+
+Always reindex with `npx gitnexus analyze --skip-agents-md`, never bare — despite
+what the generated block above says. A bare `analyze` rewrites the managed region
+in this file *and* re-injects the one deliberately removed from `AGENTS.md`. The
+counts above are frozen on purpose and will drift; that is the intended trade.
