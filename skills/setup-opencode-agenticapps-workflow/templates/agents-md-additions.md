@@ -83,142 +83,21 @@ session-level discipline the model brings to every diff.
 
 ## Development Workflow
 
-This repo uses the AgenticApps spec-first workflow on the OpenAI
-opencode host. The trigger skill `agentic-apps-workflow` activates
-on every code-touching task and emits the canonical commitment
-ritual before any tool call. See
-[`agenticapps-workflow-core`](https://github.com/agenticapps-eu/agenticapps-workflow-core)
-for the spec, this repo for the host-specific binding.
-
-The version of `opencode-workflow` this project was set up against is
-recorded at `.opencode/workflow-version.txt`.
-
-## Workflow Enforcement Hooks (MANDATORY)
-
-The `agentic-apps-workflow` trigger skill binds every spec/02 gate
-to a `opencode-*` skill. Project-specific gate bindings live in
-`.planning/config.json`. Do not bypass a gate — accept-via-ADR is
-the override path. Gates that do not apply to this scaffolder repo
-(no UI, no DB, no auth) are documented in `docs/ENFORCEMENT-PLAN.md`
-with the rationale.
-
-| Gate | Bound skill | Applies to scaffolder? |
-|---|---|---|
-Gates marked **(Superpowers)** or **(GSD)** bind to the upstream opencode skills
-(installed via the Superpowers plugin and `npx gsd-opencode`); see `docs/BINDING.md`.
-The rest are AgenticApps/gstack gates shipped by this repo.
-
-| Gate | Bound skill | Applies to scaffolder? |
-|---|---|---|
-| brainstorm-ui | `superpowers:brainstorming` (Superpowers) | No (no UI) |
-| brainstorm-architecture | `superpowers:brainstorming` (Superpowers) | Yes (when adding skills/templates/migrations) |
-| design-shotgun | `opencode-design-shotgun` | No (no UI) |
-| design-critique | `opencode-design-critique` | No (no UI) |
-| tdd | `superpowers:test-driven-development` (Superpowers) | Yes (any logic in `install.sh` / `run-tests.sh`) |
-| ui-preview | `opencode-qa` (preview mode) | No (no UI) |
-| verification | `superpowers:verification-before-completion` (Superpowers) | Yes (always) |
-| spec-review | `opencode-spec-review` | Yes (always) |
-| code-review | `superpowers:requesting-code-review` (Superpowers) | Yes (always) |
-| security | `opencode-cso` | Yes (executable scripts) |
-| database-security | `opencode-database-sentinel-audit` | No (no DB) |
-| qa | `opencode-qa` | No (no dev server) |
-| impeccable-audit | `opencode-impeccable-audit` | No (no UI) |
-| db-pre-launch-audit | `opencode-database-sentinel-audit` | No (no DB) |
-| branch-close | `superpowers:finishing-a-development-branch` (Superpowers) | Yes (always) |
-
-## Skill routing
-
-For any task in this scaffolder repo, route through the trigger
-skill's task-size table:
-
-- **Tiny** (typo, comment, README) → `superpowers:verification-before-completion`
-- **Small** (single-file logic) → `superpowers:test-driven-development` → `superpowers:verification-before-completion` → `superpowers:finishing-a-development-branch`
-- **Medium** (new skill, new template, new migration) → `/gsd-discuss-phase` → `/gsd-plan-phase` → `/gsd-execute-phase` (GSD)
-- **Large** (cross-cutting refactor, new lifecycle, breaking changes) → same as medium plus `opencode-cso` for any security-sensitive scripts
-
-Bug reports route through `/gsd-debug` (GSD) or
-`superpowers:systematic-debugging` (Observe → Hypothesize → Test → Conclude).
+This repo uses the AgenticApps spec-first workflow on the opencode host.
+On any code-touching task the `agentic-apps-workflow` trigger skill
+activates, emits the canonical commitment ritual before any tool call,
+and carries the gate bindings, task-size routing, plan-review, and
+knowledge-capture procedures — read them there, not here.
+Project-specific bindings live in `.planning/config.json`; gates that do
+not fire on this project are documented in `docs/ENFORCEMENT-PLAN.md`.
+Do not bypass a gate — accept-via-ADR is the override path. Spec:
+[`agenticapps-workflow-core`](https://github.com/agenticapps-eu/agenticapps-workflow-core).
+Version stamp: `.opencode/workflow-version.txt`.
 
 ## Session handoff
 
-At the start of every session, check for `.opencode/session-handoff.md`.
-If it exists and was modified in the last 7 days, read it before doing
-anything else and confirm what was found. **Only read the opencode
-handoff** — do NOT read a bare root `session-handoff.md` or another
-host's handoff (e.g. the Codex host's `session-handoff.md`, which
-lives under its own marker dir); handoffs are
-host-scoped so multiple hosts can share one working tree without
-cross-contaminating context.
-
-Before ending any session — when asked to exit, when the final
-task is done, or when context is getting full — write
-`.opencode/session-handoff.md`. The file is in `.gitignore`
-because it is a working artifact for cross-session continuity, not
-a shipped scaffolder artifact.
-
-## Knowledge Capture — Ritual Tail (spec §15)
-
-Transferable learnings must not die in a `.opencode/session-handoff.md` that
-the next session overwrites. This step routes them to a cross-repo memory:
-**one Obsidian note per repo** in the operator's vault. It is the FINAL step of
-three rituals — run it AFTER, never before, the ritual's own artifact exists:
-
-1. **Session handoff** — after `.opencode/session-handoff.md` is written.
-2. **Plan completion** — after a phase plan is authored/marked complete under
-   `.planning/` (`/gsd-plan-phase`).
-3. **Phase completion** — after the phase artifacts are committed
-   (`/gsd-execute-phase`).
-
-The vault write is machine-local: it MUST NEVER be committed to the repo, and
-it MUST NEVER fail, block, or roll back the ritual that triggered it — on any
-failure print one warning line and continue.
-
-Procedure (mechanical — follow every branch exactly):
-
-1. **Read the config.** Open `.planning/config.json` — the single, shared,
-   host-neutral file (opencode does not namespace it) — and read its
-   `knowledge_capture` object. **Skip** — print at most one line
-   `knowledge-capture: skipped (<reason>)` and continue the ritual — when ANY
-   of these holds:
-   - `.planning/config.json` is absent, or has no `knowledge_capture` key, or
-   - `knowledge_capture.enabled` is `false`, or
-   - the parent folder of `knowledge_capture.note` does not exist (expand a
-     leading `~` against `$HOME` first).
-   NEVER create the parent folder: an absent vault means "not this machine",
-   not "set up the vault".
-2. **Distill 1–5 transferable learnings** from the ritual just completed. A
-   learning qualifies ONLY if it would change how you, another agent, or
-   another host works next time: gotchas whose root cause generalizes; decision
-   rationale with reusable trade-offs; tooling/workflow insights (what made the
-   agent fast or slow); wrong assumptions and what corrected them. Status
-   updates, restatements of the plan, repo facts already in
-   ADRs/handoffs/CHANGELOGs, and filler do NOT qualify. **If nothing clears the
-   bar, write nothing** — no empty entries, no placeholders. A skipped write is
-   conformant; a padded one is not.
-3. **Resolve the note path.** Let `NOTE` = `knowledge_capture.note` with a
-   leading `~` expanded against `$HOME`.
-4. **Create the note on first write.** If `NOTE` does not exist, create it from
-   the skeleton at
-   `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/setup-opencode-agenticapps-workflow/templates/obsidian-learnings-note.md`
-   (fill the `<...>` fields and the dates; `hosts:` starts as `[opencode]`).
-5. **Prepend a Log entry** at the TOP of `## Log` (append-only — NEVER edit or
-   delete existing entries) under a heading of EXACTLY this shape, with
-   `opencode` as the host tag:
-   `### YYYY-MM-DD — <handoff|plan|phase> — <short title> (opencode)`
-   where the second field is the trigger that fired (`handoff`, `plan`, or
-   `phase`), and the learnings as bullets beneath it.
-6. **Curate `## Key Learnings`:** dedupe, merge related items, promote log
-   entries that earned it, demote or remove stale ones. Target ~10–20
-   highest-value items — each a bolded short title plus one to three sentences
-   carrying the transferable insight, not the status.
-7. **Update frontmatter:** set `updated:` to today's date; ensure `opencode`
-   appears in the `hosts:` list (add it, preserving any hosts already listed —
-   e.g. `[claude]` becomes `[claude, opencode]`).
-8. **Report** in one or two lines what was written (or why the step skipped).
-
-Vault safety (hard rules): touch ONLY the configured note — never other repos'
-notes, the folder's `CLAUDE.md`, or anything else in the vault. Never write
-secrets, tokens, URLs with embedded credentials, or client-confidential data;
-redact before writing.
+Read `.opencode/session-handoff.md` at session start if newer than 7
+days; write it before ending a session. Only the opencode handoff —
+never another host's. Full protocol in the trigger skill.
 
 <!-- END: agentic-apps-workflow sections -->

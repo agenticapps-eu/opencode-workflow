@@ -9,6 +9,72 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-07-19
+
+### Changed
+
+- **The always-loaded `AGENTS.md` carried ~140 lines that only bind once a code
+  task is underway, and three of those four blocks were already duplicated in
+  the trigger skill** (migration `0010`). Core spec **0.10.0** added an
+  "Instruction-surface economy (eager vs lazy)" convention to §12 (core
+  ADR-0020), extending §12 from *where in* the eager file prose sits to *what
+  belongs in it at all*: the always-loaded file SHOULD carry the §11 canonical
+  block plus a short pointer to the trigger skill, and procedural content SHOULD
+  live in the lazily-loaded skill.
+
+  `AGENTS.md` is injected on **every** turn, including turns that never touch
+  code, so its whole content is re-billed per turn. This host was paying that on
+  the §02 gate table, the task-size routing table, the session-handoff protocol
+  and the §15 knowledge-capture ritual tail. For three of the four the eager copy
+  was pure redundancy — the trigger skill already carried the normative version,
+  and §15 had *already* obliged the ritual tail to live in `SKILL.md` since it
+  was introduced in `0005`, so that copy had been off-pattern from the start.
+  Only the session-handoff protocol genuinely moved; step 1 puts it in the skill
+  before step 2 removes it from `AGENTS.md`, so the contract is never absent from
+  both files at once.
+
+  `AGENTS.md` goes **250 → 129 lines**; the managed block's non-§11 content goes
+  from ~140 lines to 19. What survives is the §11 block (byte-identical, behind
+  its provenance anchor, still near the top per §12's placement advisory), a
+  pointer to the trigger skill, and a two-line session-handoff pointer.
+
+  **Enforcement did not move — only prose.** §12 is explicit that a host whose
+  runtime enforces a gate programmatically keeps the hook wiring where the
+  runtime needs it. `.planning/config.json` bindings, `.github/workflows/ci.yml`
+  and `check-snapshot-parity.sh` are untouched. The §11 block, its
+  `<!-- spec-source -->` anchor and the marker pair are untouched: the migration
+  edits only content below the §11 terminator and above the END marker, which is
+  what keeps `0009`'s strip/inject rules intact (nothing new lands between the
+  provenance line and the terminator, and `## Development Workflow` survives as
+  the `## ` bound `0001` requires after the block).
+
+  Rejected: replacing the whole managed tail wholesale. Simpler, but it would
+  discard any section a consuming project had added inside the markers. The
+  transform names the four sections it touches and passes everything else
+  through, so a project that added its own section keeps it.
+
+  Suite: **105 → 115 PASS / 0 FAIL / 1 SKIP**, including a new `0010` group of 10
+  whose transform is *extracted from the migration document and executed*, so the
+  test cannot drift from what ships — with a shape assertion so a moved sentinel
+  fails loudly rather than passing vacuously against an unmodified fixture.
+  Snapshot parity green; `templates/agents-md-additions.md` rebuilt by hand,
+  since `--rebuild` does not cover it. Three assertions that pinned the old end
+  state were updated: `0005` now sources the §15 section from the trigger skill
+  (its contract — the section is installable, carries the `(opencode)` host tag,
+  lands inside a marker block — is unchanged), and `0007`/`0008`'s claim
+  assertions move to 0.10.0.
+
+  `implements_spec` advances **0.9.1 → 0.10.0** across `SKILL.md` and the three
+  config mirrors `0006`'s invariant binds to it. The nested per-gate contract
+  versions (`0.5.0` plan-review, `0.4.0` ts-declare-first) are deliberately
+  untouched — they cite a gate contract, not the host claim. Conformance level
+  unchanged at `full`.
+
+  Side effect worth noting: the pre-existing orphan table header in the old
+  `AGENTS.md` (a duplicated `| Gate | Bound skill | Applies to scaffolder? |`
+  header with no rows, sitting above the real table) is gone — it lived inside
+  the enforcement section this migration drops.
+
 ## [0.5.0] — 2026-07-15
 
 ### Fixed

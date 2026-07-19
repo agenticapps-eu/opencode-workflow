@@ -393,7 +393,12 @@ test_migration_0005() {
 
   local kctpl="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/templates/config-knowledge-capture.json"
   local notetpl="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/templates/obsidian-learnings-note.md"
-  local agentstpl="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/templates/agents-md-additions.md"
+  # Migration 0010 (spec 0.10.0 §12 instruction-surface economy) moved the §15
+  # ritual tail out of the eager AGENTS.md template into the lazily-loaded
+  # trigger skill. 0005's contract — the §15 section is installable, carries the
+  # (opencode) host tag, and lands inside a marker block — is unchanged; only
+  # the surface it ships on moved, so it is sourced from there now.
+  local agentstpl="$REPO_ROOT/skills/agentic-apps-workflow/SKILL.md"
 
   # Templates ship.
   if [ -f "$kctpl" ] && [ -f "$notetpl" ] && [ -f "$agentstpl" ]; then
@@ -674,13 +679,13 @@ test_migration_0007() {
   done
 
   # The claim, and 0006's invariant that the config mirrors it.
-  if grep -q '^implements_spec: 0.9.1$' "$skill" \
-     && jq -e '.implements_spec == "0.9.1"' "$REPO_ROOT/.planning/config.json" >/dev/null 2>&1 \
-     && jq -e '.implements_spec == "0.9.1"' "$snap" >/dev/null 2>&1; then
-    echo "  ${GREEN}PASS${RESET} claim 0.9.1 mirrored across SKILL.md, config, snapshot"
+  if grep -q '^implements_spec: 0.10.0$' "$skill" \
+     && jq -e '.implements_spec == "0.10.0"' "$REPO_ROOT/.planning/config.json" >/dev/null 2>&1 \
+     && jq -e '.implements_spec == "0.10.0"' "$snap" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} claim 0.10.0 mirrored across SKILL.md, config, snapshot"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} claim not 0.9.1 or not mirrored (0006 invariant broken)"
+    echo "  ${RED}FAIL${RESET} claim not 0.10.0 or not mirrored (0006 invariant broken)"
     FAIL=$((FAIL+1))
   fi
 
@@ -697,7 +702,7 @@ test_migration_0007() {
   fi
 
   # §14 (0.6.0) — declared, since the trigger cannot occur here.
-  if grep -q '^## Spec deltas (spec 0.9.1)' "$skill" && grep -q '§14' "$skill"; then
+  if grep -q '^## Spec deltas (spec 0.10.0)' "$skill" && grep -q '§14' "$skill"; then
     echo "  ${GREEN}PASS${RESET} §14 declared in Spec deltas"
     PASS=$((PASS+1))
   else
@@ -770,8 +775,8 @@ test_migration_0008() {
   fi
 
   # The claim must NOT have moved — 0008 corrects a label, not conformance.
-  if grep -q '^implements_spec: 0.9.1$' "$REPO_ROOT/skills/agentic-apps-workflow/SKILL.md"; then
-    echo "  ${GREEN}PASS${RESET} conformance claim untouched at 0.9.1"
+  if grep -q '^implements_spec: 0.10.0$' "$REPO_ROOT/skills/agentic-apps-workflow/SKILL.md"; then
+    echo "  ${GREEN}PASS${RESET} conformance claim at 0.10.0 (0008 itself moved nothing)"
     PASS=$((PASS+1))
   else
     echo "  ${RED}FAIL${RESET} claim moved — 0008 must not touch implements_spec"
@@ -821,6 +826,134 @@ extract_fence_after() { # $1 doc  $2 anchor-substring  $3 out-file
     inf && /^```$/ { exit }
     inf { print }
   ' "$1" > "$3"
+}
+
+test_migration_0010() {
+  echo ""
+  echo "${YELLOW}=== Migration 0010 — slim the eager AGENTS.md (spec 0.10.0 §12) ===${RESET}"
+
+  local doc="$REPO_ROOT/migrations/0010-slim-agents-eager-surface.md"
+  local mirror="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+  local skill="$REPO_ROOT/skills/agentic-apps-workflow/SKILL.md"
+
+  if [ ! -f "$doc" ]; then
+    echo "  ${RED}FAIL${RESET} 0010 doc missing"; FAIL=$((FAIL+1)); return
+  fi
+
+  # The transform is extracted from the DOCUMENT and executed, so the doc is the
+  # single source of truth — a copy inlined here could drift from what ships.
+  local tmp; tmp="$(mktemp -d)"
+  extract_region "$doc" 'step2' "$tmp/step2.sh"
+
+  # Shape assertion: a mis-lock must fail loudly, not vacuously. An empty or
+  # tiny extraction means the sentinels moved — every downstream assertion in
+  # this function would then "pass" against an unmodified fixture.
+  if [ "$(wc -l < "$tmp/step2.sh")" -lt 20 ] || ! grep -q 'Full protocol in the trigger skill' "$tmp/step2.sh"; then
+    echo "  ${RED}FAIL${RESET} step2 extraction mis-locked (sentinels moved?) — refusing to test vacuously"
+    FAIL=$((FAIL+1)); rm -rf "$tmp"; return
+  fi
+
+  # Fixture: a v0.5.0-shaped AGENTS.md with all four relocated sections present.
+  {
+    printf '# AGENTS\n\nproject preamble\n\n'
+    printf '<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->\n\n'
+    printf '<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->\n'
+    cat "$mirror"
+    printf '\n## Development Workflow\n\nold workflow prose\n\n'
+    printf '## Workflow Enforcement Hooks (MANDATORY)\n\n| Gate | Bound skill |\n|---|---|\n| tdd | x |\n\n'
+    printf '## Skill routing\n\n- Tiny -> verification\n\n'
+    printf '## Session handoff\n\nlong handoff protocol prose\n\n'
+    printf '## Knowledge Capture — Ritual Tail (spec §15)\n\nlong ritual prose (opencode)\n\n'
+    printf '<!-- END: agentic-apps-workflow sections -->\n\n'
+    printf '## Code Intelligence\n\nproject-owned section below the marker\n'
+  } > "$tmp/AGENTS.md"
+
+  if ! ( cd "$tmp" && bash step2.sh >/dev/null ); then
+    echo "  ${RED}FAIL${RESET} step2 shell errored on the fixture"; FAIL=$((FAIL+1)); rm -rf "$tmp"; return
+  fi
+
+  # 1. §11 survives byte-identical.
+  if awk '/^## Coding Discipline \(NON-NEGOTIABLE\)$/{f=1} f{print} /session-level discipline the model brings to every diff\.$/{exit}' "$tmp/AGENTS.md" \
+       | diff -q - "$mirror" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} §11 block survives the slim byte-identical"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} §11 block altered by the slim"; FAIL=$((FAIL+1))
+  fi
+
+  # 2. The three relocated sections are gone.
+  if ! grep -q '^## Workflow Enforcement Hooks (MANDATORY)$' "$tmp/AGENTS.md" \
+     && ! grep -q '^## Skill routing$' "$tmp/AGENTS.md" \
+     && ! grep -q '^## Knowledge Capture — Ritual Tail (spec §15)$' "$tmp/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} gate table, routing and §15 tail removed from eager file"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} a relocated section survived in AGENTS.md"; FAIL=$((FAIL+1))
+  fi
+
+  # 3. Both pointers installed.
+  if grep -q 'Full protocol in the trigger skill' "$tmp/AGENTS.md" \
+     && grep -q 'agentic-apps-workflow` trigger skill' "$tmp/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} trigger-skill and session-handoff pointers installed"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} pointers missing after slim"; FAIL=$((FAIL+1))
+  fi
+
+  # 4. Content OUTSIDE the marker block is untouched (the scoping guarantee).
+  if grep -q '^project-owned section below the marker$' "$tmp/AGENTS.md" \
+     && grep -q '^project preamble$' "$tmp/AGENTS.md" \
+     && grep -q '^## Code Intelligence$' "$tmp/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} content outside the marker block untouched"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} slim escaped the marker block"; FAIL=$((FAIL+1))
+  fi
+
+  # 5. §11 is still followed by a '## ' line (0001's replace/rollback bound).
+  if awk '/session-level discipline the model brings to every diff\.$/{getline; getline; print; exit}' "$tmp/AGENTS.md" | grep -q '^## '; then
+    echo "  ${GREEN}PASS${RESET} §11 block still bounded by a following '## ' heading"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} §11 block lost its trailing '## ' bound (breaks 0001/0009)"; FAIL=$((FAIL+1))
+  fi
+
+  # 6. Exactly one provenance anchor (0009 post-check 4).
+  if [ "$(grep -c 'spec-source: agenticapps-workflow-core' "$tmp/AGENTS.md")" -eq 1 ]; then
+    echo "  ${GREEN}PASS${RESET} exactly one §11 provenance anchor"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} provenance anchor count != 1"; FAIL=$((FAIL+1))
+  fi
+
+  # 7. Idempotent: a second apply changes nothing.
+  cp "$tmp/AGENTS.md" "$tmp/AGENTS.once"
+  ( cd "$tmp" && bash step2.sh >/dev/null )
+  if diff -q "$tmp/AGENTS.once" "$tmp/AGENTS.md" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} second apply is a no-op"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} slim is not idempotent"; FAIL=$((FAIL+1))
+  fi
+
+  # 8. The live repo is at the migration's end state (dogfooding).
+  if ! grep -q '^## Workflow Enforcement Hooks (MANDATORY)$' "$REPO_ROOT/AGENTS.md" \
+     && grep -q 'Full protocol in the trigger skill' "$REPO_ROOT/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} live AGENTS.md is at the 0010 end state"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} live AGENTS.md not slimmed (repo must dogfood its own migration)"; FAIL=$((FAIL+1))
+  fi
+
+  # 9. The relocated procedures actually landed in the trigger skill.
+  if grep -q '^## Session handoff$' "$skill" \
+     && grep -q '^## Knowledge Capture — Ritual Tail (spec §15)$' "$skill" \
+     && grep -q '^## Instruction surface — eager vs lazy (spec §12)$' "$skill"; then
+    echo "  ${GREEN}PASS${RESET} handoff + §15 tail + §12 rationale present in trigger skill"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} a relocated procedure is missing from the trigger skill"; FAIL=$((FAIL+1))
+  fi
+
+  # 10. The §15 cross-reference no longer claims an AGENTS.md twin.
+  if ! grep -q 'mirrors the same section in the project' "$skill"; then
+    echo "  ${GREEN}PASS${RESET} stale 'mirrors AGENTS.md' cross-reference corrected"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} §15 still claims a twin in AGENTS.md that 0010 removed"; FAIL=$((FAIL+1))
+  fi
+
+  rm -rf "$tmp"
 }
 
 test_migration_0009() {
@@ -1266,6 +1399,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0009" ]; then
   test_migration_0009
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0010" ]; then
+  test_migration_0010
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then

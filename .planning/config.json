@@ -1,6 +1,6 @@
 {
   "$schema": "https://github.com/agenticapps-eu/opencode-workflow/blob/main/templates/config-hooks.schema.json",
-  "implements_spec": "0.9.1",
+  "implements_spec": "0.10.0",
   "host": "opencode",
   "hooks": {
     "pre_execution": {
