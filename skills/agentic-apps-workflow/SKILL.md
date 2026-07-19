@@ -1,7 +1,7 @@
 ---
 name: agentic-apps-workflow
-version: 0.5.0
-implements_spec: 0.9.1
+version: 0.6.0
+implements_spec: 0.10.0
 description: |
   Enforces the AgenticApps spec-first workflow on opencode. This skill MUST
   activate whenever the user asks opencode to implement, build, code, fix,
@@ -20,7 +20,7 @@ description: |
 This is the trigger skill for the AgenticApps spec-first workflow on
 the opencode host. It is a `full`-conformance implementation of
 [`agenticapps-workflow-core`](https://github.com/agenticapps-eu/agenticapps-workflow-core)
-v0.9.1. The frontmatter `implements_spec: 0.9.1` is the conformance
+v0.10.0. The frontmatter `implements_spec: 0.10.0` is the conformance
 citation per spec/09.
 
 The body of this skill follows the structure required by the core
@@ -212,10 +212,32 @@ directory directly.
 
 ---
 
-## Spec deltas (spec 0.9.1)
+## Instruction surface — eager vs lazy (spec §12)
+
+Spec 0.10.0 added an "Instruction-surface economy" SHOULD to §12: the
+always-loaded instruction file is re-billed on every turn, so it carries
+only what must be resident on *every* turn.
+
+`AGENTS.md` therefore carries the §11 canonical block (verbatim, behind its
+provenance anchor, near the top) plus two short pointers — this skill, and
+the session-handoff protocol. Everything procedural lives **here**, in the
+lazily-loaded trigger skill, because this skill loads on exactly the
+code-touching turns where those procedures bind: the Step 3 gate-binding
+table, Step 1 task-size routing, the session-handoff protocol, and the §15
+knowledge-capture ritual tail.
+
+Before v0.6.0 all four were duplicated into `AGENTS.md`, which cost ~150
+eager lines per turn and pushed the §11 block toward the mid-context position
+§12's placement advisory exists to avoid. Gate *enforcement* is unaffected —
+`.planning/config.json` and the CI guards are where the machine reads
+bindings; only the prose moved.
+
+---
+
+## Spec deltas (spec 0.10.0)
 
 Per core spec §09, a host names every requirement it does not satisfy
-verbatim, with rationale. Audited 2026-07-15.
+verbatim, with rationale. Audited 2026-07-19.
 
 - **§14 prompt-injection — trivially conformant.** This scaffolder
   builds no LLM prompts from non-self-authored values, so §14's trigger
@@ -409,6 +431,29 @@ description matches.
 
 ---
 
+## Session handoff
+
+`.opencode/session-handoff.md` is the primary continuity mechanism across
+sessions — it survives context resets and `--resume`.
+
+**At session start:** check for `.opencode/session-handoff.md`. If it exists
+and was modified in the last 7 days, read it before doing anything else and
+confirm what was found. **Only read the opencode handoff** — do NOT read a bare
+root `session-handoff.md` or another host's (e.g. the Codex host's, which lives
+under its own marker dir). Handoffs are host-scoped so multiple hosts can share
+one working tree without cross-contaminating context.
+
+**Before ending any session** — when asked to exit, when the final task is
+done, or when context is getting full — write `.opencode/session-handoff.md`
+with the accomplished / decisions / files-modified / next-session /
+open-questions shape. The file is in `.gitignore`: it is a working artifact for
+cross-session continuity, not a shipped scaffolder artifact.
+
+The knowledge-capture ritual tail below runs **after** the handoff is written,
+never before.
+
+---
+
 ## Knowledge Capture — Ritual Tail (spec §15)
 
 Transferable learnings must not die in a `.opencode/session-handoff.md` that
@@ -424,9 +469,10 @@ three rituals — run it AFTER, never before, the ritual's own artifact exists:
 
 The vault write is machine-local: it MUST NEVER be committed to the repo, and
 it MUST NEVER fail, block, or roll back the ritual that triggered it — on any
-failure print one warning line and continue. This mirrors the same section in
-the project `AGENTS.md` (root-down concat); both are the same contract, so a
-session that only reads `AGENTS.md` still performs the capture.
+failure print one warning line and continue. This section is the **only** copy
+of the contract: it lived in duplicate in the project `AGENTS.md` until v0.6.0,
+when spec 0.10.0's instruction-surface economy convention moved it here, where
+it loads on exactly the code-touching turns that can trigger it.
 
 Procedure (mechanical — follow every branch exactly):
 

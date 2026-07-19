@@ -6,7 +6,12 @@ apply (with rationale), and which skill is bound to each. Gates marked
 **(Superpowers)** or **(GSD)** bind to the upstream opencode distributions
 (the Superpowers plugin and `npx gsd-opencode`); the rest are this repo's
 `opencode-*` gates. See `docs/BINDING.md` for the binding architecture. It is
-the host-side companion to `AGENTS.md`'s Workflow Enforcement Hooks table.
+the host-side companion to the trigger skill's **Step 3 — Gate-to-skill
+bindings** table. (Until v0.6.0 it companioned a duplicate of that table in
+`AGENTS.md`; migration `0010` removed the eager copy under spec 0.10.0's §12
+instruction-surface economy convention — the bindings now live in the
+lazily-loaded `skills/agentic-apps-workflow/SKILL.md`, with the machine-readable
+copy in `.planning/config.json`.)
 
 The scaffolder repo dogfoods its own workflow per Phase 6 of the
 build-out (`docs/dogfood-2026-05-10.md`).
@@ -14,7 +19,7 @@ build-out (`docs/dogfood-2026-05-10.md`).
 ## Conformance claim
 
 `opencode-workflow` claims **`full` conformance** to
-`agenticapps-workflow-core` v0.9.1 per spec/09 because:
+`agenticapps-workflow-core` v0.10.0 per spec/09 because:
 
 1. The trigger skill `agentic-apps-workflow` reproduces the **five**
    canonical-prose blocks verbatim — Step 0 Commitment Ritual,
@@ -28,6 +33,15 @@ build-out (`docs/dogfood-2026-05-10.md`).
    - **§10 (observability)** — delegated to the standalone
      `agenticapps-observability` skill (see "§10 Observability —
      delegated binding" below); a *satisfied* MUST per §09.
+   - **§12 (authoring conventions), incl. the v0.10.0
+     instruction-surface economy SHOULD** — the always-loaded `AGENTS.md`
+     carries the §11 canonical block plus two short pointers (the trigger
+     skill, and the session-handoff protocol). The §02 gate table, task-size
+     routing, the session-handoff procedure and the §15 knowledge-capture
+     ritual tail all live in the lazily-loaded trigger skill, which loads on
+     exactly the code-touching turns where they bind. Gate *enforcement* is
+     unaffected — `.planning/config.json` and the CI guards are unchanged;
+     only prose moved. Migration `0010`; core ADR-0020.
    - **§12 (authoring conventions)** — branchy workflows newly
      authored/edited at 0.4.0 render as Mermaid `flowchart`s
      (`opencode-ts-declare-first` refusals; trigger Step 2 routing).
