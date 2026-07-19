@@ -920,7 +920,32 @@ test_migration_0010() {
     echo "  ${RED}FAIL${RESET} provenance anchor count != 1"; FAIL=$((FAIL+1))
   fi
 
-  # 7. Idempotent: a second apply changes nothing.
+  # 7. A fenced example inside a dropped section does not leak. A session-handoff
+  # template is literally a fence full of "## " lines; if the transform is not
+  # fence-aware those lines read as headings, end the drop early, and spill the
+  # rest of the fence into the slimmed file. This fixture pins that.
+  local ft; ft="$(mktemp -d)"
+  {
+    printf '<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->\n\n'
+    printf '## Session handoff\n\nprose\n\n```markdown\n# Handoff\n\n## Accomplished\n- x\n\n## Decisions\n- y\n```\n\nmore prose\n\n'
+    printf '## Skill routing\n\n- Tiny -> verification\n\n'
+    printf '<!-- END: agentic-apps-workflow sections -->\n'
+  } > "$ft/AGENTS.md"
+  cp "$tmp/step2.sh" "$ft/step2.sh"
+  ( cd "$ft" && bash step2.sh >/dev/null )
+  if ! grep -q '^## Accomplished$' "$ft/AGENTS.md" \
+     && ! grep -q '^## Decisions$' "$ft/AGENTS.md" \
+     && ! grep -q '^- x$' "$ft/AGENTS.md" \
+     && ! grep -q '^more prose$' "$ft/AGENTS.md" \
+     && ! grep -q '^## Skill routing$' "$ft/AGENTS.md" \
+     && grep -q 'Full protocol in the trigger skill' "$ft/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} fenced '## ' lines inside a dropped section do not leak"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} fence leak — a '## ' line inside a code fence ended the drop early"; FAIL=$((FAIL+1))
+  fi
+  rm -rf "$ft"
+
+  # 8. Idempotent: a second apply changes nothing.
   cp "$tmp/AGENTS.md" "$tmp/AGENTS.once"
   ( cd "$tmp" && bash step2.sh >/dev/null )
   if diff -q "$tmp/AGENTS.once" "$tmp/AGENTS.md" >/dev/null 2>&1; then
@@ -929,7 +954,7 @@ test_migration_0010() {
     echo "  ${RED}FAIL${RESET} slim is not idempotent"; FAIL=$((FAIL+1))
   fi
 
-  # 8. The live repo is at the migration's end state (dogfooding).
+  # 9. The live repo is at the migration's end state (dogfooding).
   if ! grep -q '^## Workflow Enforcement Hooks (MANDATORY)$' "$REPO_ROOT/AGENTS.md" \
      && grep -q 'Full protocol in the trigger skill' "$REPO_ROOT/AGENTS.md"; then
     echo "  ${GREEN}PASS${RESET} live AGENTS.md is at the 0010 end state"; PASS=$((PASS+1))
@@ -937,7 +962,7 @@ test_migration_0010() {
     echo "  ${RED}FAIL${RESET} live AGENTS.md not slimmed (repo must dogfood its own migration)"; FAIL=$((FAIL+1))
   fi
 
-  # 9. The relocated procedures actually landed in the trigger skill.
+  # 10. The relocated procedures actually landed in the trigger skill.
   if grep -q '^## Session handoff$' "$skill" \
      && grep -q '^## Knowledge Capture — Ritual Tail (spec §15)$' "$skill" \
      && grep -q '^## Instruction surface — eager vs lazy (spec §12)$' "$skill"; then
@@ -946,7 +971,7 @@ test_migration_0010() {
     echo "  ${RED}FAIL${RESET} a relocated procedure is missing from the trigger skill"; FAIL=$((FAIL+1))
   fi
 
-  # 10. The §15 cross-reference no longer claims an AGENTS.md twin.
+  # 11. The §15 cross-reference no longer claims an AGENTS.md twin.
   if ! grep -q 'mirrors the same section in the project' "$skill"; then
     echo "  ${GREEN}PASS${RESET} stale 'mirrors AGENTS.md' cross-reference corrected"; PASS=$((PASS+1))
   else

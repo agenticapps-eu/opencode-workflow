@@ -137,12 +137,21 @@ ordering constraint that the §15 ritual tail runs *after* the handoff is writte
 # (provenance -> terminator) is never matched because '## Coding Discipline
 # (NON-NEGOTIABLE)' falls through to mode="pass" and its subheads are '### '.
 awk '
-BEGIN { inblk=0; mode="pass" }
+BEGIN { inblk=0; mode="pass"; infence=0 }
 
 /^<!-- BEGIN: agentic-apps-workflow sections/ { inblk=1; print; next }
 /^<!-- END: agentic-apps-workflow sections -->/ { inblk=0; mode="pass"; print; next }
 
 !inblk { print; next }
+
+# Code fences must be tracked (matched via octal escape so this awk can live
+# inside a fenced block in the migration doc without closing it). A fenced
+# example inside one of these sections can
+# contain lines beginning with "## " — a session-handoff template is exactly
+# that shape. Treated as a heading, such a line ends the drop early and leaks
+# the rest of the fence into the slimmed file.
+substr($0,1,3) == "\140\140\140" { infence = !infence; if (mode=="pass") print; next }
+infence { if (mode=="pass") print; next }
 
 /^## / {
   if ($0 == "## Workflow Enforcement Hooks (MANDATORY)" || \
