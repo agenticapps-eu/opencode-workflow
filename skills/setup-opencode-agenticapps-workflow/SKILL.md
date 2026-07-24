@@ -172,8 +172,8 @@ present); in interactive mode show the diff before writing.
 
 12b. **Initialize the spec slot + opsx commands.** Run
      `openspec init --tools opencode --profile core` in the project. The
-     CLI is `@fission-ai/openspec`; if absent, instruct
-     `npm i -g @fission-ai/openspec` and continue. This generates the
+     CLI is `@fission-ai/openspec`; if absent, install it
+     (`npm i -g @fission-ai/openspec`) and continue. This generates the
      `openspec/{specs,changes,changes/archive}` slot + `openspec/config.yaml`,
      and the six `/opsx:*` commands + `openspec-*` skills under `.opencode/`.
      Bound **upstream** (§16) — the CLI generates these; never vendor or

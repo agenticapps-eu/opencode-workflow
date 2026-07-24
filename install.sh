@@ -295,6 +295,18 @@ fi
 echo ""
 echo "${YELLOW}Binding OpenSpec — openspec init --tools opencode --profile core${RESET} (generates openspec/ slot + /opsx:* commands)"
 if [ "$DRY_RUN" -eq 0 ] && [ "$SKIP_UPSTREAM" -eq 0 ]; then
+  # openspec is the front end's core dependency — auto-install it (like the old
+  # `npx gsd-opencode` bind) rather than only instructing. --skip-upstream opts out.
+  if ! command -v openspec >/dev/null 2>&1; then
+    if command -v npm >/dev/null 2>&1; then
+      echo "${YELLOW}note:${RESET} openspec CLI not found — installing @fission-ai/openspec globally..."
+      npm i -g @fission-ai/openspec \
+        || echo "${YELLOW}warn:${RESET} openspec install failed — run manually: npm i -g @fission-ai/openspec"
+    else
+      echo "${YELLOW}warn:${RESET} openspec CLI and npm both absent — install Node, then:"
+      echo "      npm i -g @fission-ai/openspec"
+    fi
+  fi
   if command -v openspec >/dev/null 2>&1; then
     if [ ! -d "$SCAFFOLDER_ROOT/openspec" ]; then
       ( cd "$SCAFFOLDER_ROOT" && openspec init --tools opencode --profile core --force ) \
@@ -304,8 +316,8 @@ if [ "$DRY_RUN" -eq 0 ] && [ "$SKIP_UPSTREAM" -eq 0 ]; then
       echo "  ${GREEN}OK${RESET}     openspec/ already present (skipping init)"
     fi
   else
-    echo "${YELLOW}warn:${RESET} openspec CLI not found — install it, then re-run:"
-    echo "      npm i -g @fission-ai/openspec && openspec init --tools opencode --profile core"
+    echo "${YELLOW}warn:${RESET} openspec still unavailable — the change-gate will BLOCK edits under an"
+    echo "      active change until it is installed (an unvalidatable change must not pass, §18)."
   fi
   echo ""
   echo "${YELLOW}Superpowers${RESET} is wired via the \"plugin\" entry in opencode.json"
