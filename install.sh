@@ -252,26 +252,76 @@ if [ $FAILED -gt 0 ]; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Bind upstream — GSD + Superpowers (this repo no longer re-ports them)
+# Bind upstream — OpenSpec (planning front end) + Superpowers (execution)
 # ─────────────────────────────────────────────────────────────────────────────
-# opencode-workflow ships only the AgenticApps layer. GSD and Superpowers are
-# the maintained upstream opencode ports — see docs/BINDING.md. Pass
+# opencode-workflow ships only the AgenticApps layer. Under spec v1.0.0 the
+# planning front end is OpenSpec, bound UPSTREAM and generated per project by its
+# CLI (spec §16) — this repo does not re-port it. Superpowers loads via the
+# opencode.json "plugin" entry. The §18 change-gate is installed here: the
+# host-agnostic shell script (the real enforcement surface), the opencode
+# tool.execute.before plugin, and this repo's git pre-commit floor. Pass
 # --skip-upstream to install only the AgenticApps skills.
 SKIP_UPSTREAM=0
 for arg in "$@"; do [ "$arg" = "--skip-upstream" ] && SKIP_UPSTREAM=1; done
 
+AA_BIN="$HOME/.agenticapps/bin"
+OPENCODE_PLUGIN_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/plugin"
+
+echo ""
+echo "${YELLOW}Installing the OpenSpec change-gate (spec §18)${RESET}"
+echo "  ${GREEN}GATE${RESET}   $AA_BIN/openspec-change-gate.sh   (host-agnostic enforcement surface)"
+echo "  ${GREEN}GATE${RESET}   $AA_BIN/reviewer-cli.sh           (reviewer-CLI wrapper)"
+echo "  ${GREEN}HOOK${RESET}   $OPENCODE_PLUGIN_DIR/openspec-change-gate.ts  (opencode tool.execute.before)"
+echo "  ${GREEN}HOOK${RESET}   .git/hooks/pre-commit             (agent-agnostic floor)"
+if [ "$DRY_RUN" -eq 0 ]; then
+  mkdir -p "$AA_BIN" "$OPENCODE_PLUGIN_DIR" "$HOME/.agenticapps/git-hooks"
+  install -m 0755 "$SCAFFOLDER_ROOT/bin/openspec-change-gate.sh" "$AA_BIN/openspec-change-gate.sh"
+  install -m 0755 "$SCAFFOLDER_ROOT/bin/reviewer-cli.sh"         "$AA_BIN/reviewer-cli.sh"
+  install -m 0644 "$SCAFFOLDER_ROOT/bin/openspec-change-gate.ts" "$OPENCODE_PLUGIN_DIR/openspec-change-gate.ts"
+  # Stage the pre-commit at a stable global path so the per-project setup skill
+  # can install it into each target repo's .git/hooks.
+  install -m 0755 "$SCAFFOLDER_ROOT/bin/git-hooks/pre-commit"    "$HOME/.agenticapps/git-hooks/pre-commit"
+  if [ -d "$SCAFFOLDER_ROOT/.git" ] || [ -f "$SCAFFOLDER_ROOT/.git" ]; then
+    hookrel="$(git -C "$SCAFFOLDER_ROOT" rev-parse --git-path hooks 2>/dev/null)"
+    if [ -n "$hookrel" ]; then
+      ( cd "$SCAFFOLDER_ROOT" && mkdir -p "$hookrel" && install -m 0755 bin/git-hooks/pre-commit "$hookrel/pre-commit" ) \
+        && echo "  ${GREEN}OK${RESET}     pre-commit installed into $hookrel/"
+    fi
+  fi
+fi
+
+# OpenSpec front end: init the slot + generate the /opsx:* commands for this repo
+# (dogfood). Per-project init is what the setup skill runs in TARGET repos.
+echo ""
+echo "${YELLOW}Binding OpenSpec — openspec init --tools opencode --profile core${RESET} (generates openspec/ slot + /opsx:* commands)"
 if [ "$DRY_RUN" -eq 0 ] && [ "$SKIP_UPSTREAM" -eq 0 ]; then
-  echo ""
-  echo "${YELLOW}Binding GSD (rokicool/gsd-opencode) — model routing + /gsd-* commands...${RESET}"
-  if command -v npx >/dev/null 2>&1; then
-    npx -y gsd-opencode --global || echo "${YELLOW}warn:${RESET} gsd-opencode install failed — run 'npx gsd-opencode --global' manually."
+  # openspec is the front end's core dependency — auto-install it (like the old
+  # `npx gsd-opencode` bind) rather than only instructing. --skip-upstream opts out.
+  if ! command -v openspec >/dev/null 2>&1; then
+    if command -v npm >/dev/null 2>&1; then
+      echo "${YELLOW}note:${RESET} openspec CLI not found — installing @fission-ai/openspec globally..."
+      npm i -g @fission-ai/openspec \
+        || echo "${YELLOW}warn:${RESET} openspec install failed — run manually: npm i -g @fission-ai/openspec"
+    else
+      echo "${YELLOW}warn:${RESET} openspec CLI and npm both absent — install Node, then:"
+      echo "      npm i -g @fission-ai/openspec"
+    fi
+  fi
+  if command -v openspec >/dev/null 2>&1; then
+    if [ ! -d "$SCAFFOLDER_ROOT/openspec" ]; then
+      ( cd "$SCAFFOLDER_ROOT" && openspec init --tools opencode --profile core --force ) \
+        && echo "  ${GREEN}OK${RESET}     openspec slot + /opsx:* commands generated" \
+        || echo "${YELLOW}warn:${RESET} openspec init failed — run it manually in this repo."
+    else
+      echo "  ${GREEN}OK${RESET}     openspec/ already present (skipping init)"
+    fi
   else
-    echo "${YELLOW}warn:${RESET} npx not found — install Node, then: npx gsd-opencode --global"
+    echo "${YELLOW}warn:${RESET} openspec still unavailable — the change-gate will BLOCK edits under an"
+    echo "      active change until it is installed (an unvalidatable change must not pass, §18)."
   fi
   echo ""
   echo "${YELLOW}Superpowers${RESET} is wired via the \"plugin\" entry in opencode.json"
   echo "  (superpowers@git+https://github.com/obra/superpowers.git) — opencode loads it on restart."
-  echo "  Verify: ask opencode \"tell me about your superpowers\"."
 fi
 
 echo ""
@@ -281,8 +331,8 @@ else
   echo "${GREEN}done.${RESET} Restart opencode (or open a fresh session) to pick up everything."
   echo ""
   echo "Next:"
-  echo "  - Pick GLM 5.2 for the GSD stages:  /gsd-set-profile"
+  echo "  - Open a change:                    /opsx:propose \"<idea>\""
   echo "  - In a fresh project:               \$setup-opencode-agenticapps-workflow"
   echo "  - In an existing installed project: \$update-opencode-agenticapps-workflow"
-  echo "  - Architecture + caveats:           docs/BINDING.md"
+  echo "  - Workflow explainer + caveats:     docs/WORKFLOW.md · docs/BINDING.md"
 fi

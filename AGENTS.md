@@ -4,10 +4,11 @@ This is the **scaffolder repo** that ships the AgenticApps spec-first
 workflow for the opencode host. It self-applies its own
 workflow per Phase 6 of the build-out.
 
-The trigger skill, gate skills, GSD entry points, and lifecycle skills
-this repo authors are linked into `${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/`
-via `install.sh` (run from this repo's root). opencode auto-discovers
-them on next session start.
+The trigger skill and gate skills this repo authors are linked into
+`${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/` via `install.sh`
+(run from this repo's root); the OpenSpec `opsx` commands and slot are
+generated per-project by `openspec init --tools opencode --profile core`.
+opencode auto-discovers the skills on next session start.
 
 The version of `opencode-workflow` this repo's own development is
 asserted against is recorded at `.opencode/workflow-version.txt`.
@@ -97,11 +98,15 @@ session-level discipline the model brings to every diff.
 
 ## Development Workflow
 
-This repo uses the AgenticApps spec-first workflow on the opencode host.
-On any code-touching task the `agentic-apps-workflow` trigger skill
-activates, emits the canonical commitment ritual before any tool call,
-and carries the gate bindings, task-size routing, plan-review, and
-knowledge-capture procedures — read them there, not here.
+This repo uses the AgenticApps spec-first workflow (OpenSpec +
+Superpowers, spec v1.0.0) on the opencode host. Product work moves
+through an OpenSpec change — propose → validate → execute → archive →
+ship — while the §18 change-gate refuses code edits until the active
+change has validated and been reviewed. On any code-touching task the
+`agentic-apps-workflow` trigger skill activates, emits the commitment
+ritual before any tool call, and carries the lifecycle routing, gate
+bindings, and knowledge-capture procedures — read them there, and see
+[`docs/WORKFLOW.md`](docs/WORKFLOW.md) for the explainer.
 Project-specific bindings live in `.planning/config.json`; gates that do
 not fire on this project are documented in `docs/ENFORCEMENT-PLAN.md`.
 Do not bypass a gate — accept-via-ADR is the override path. Spec:
@@ -115,15 +120,3 @@ days; write it before ending a session. Only the opencode handoff —
 never another host's. Full protocol in the trigger skill.
 
 <!-- END: agentic-apps-workflow sections -->
-
-## Code Intelligence
-
-This repo is indexed by GitNexus. To find *where* something lives, query the graph
-first — `gitnexus_query` for a concept, `gitnexus_context` for a known symbol,
-`gitnexus_impact` before you change one — rather than grepping blind. Fall back to
-text search when the graph has no answer or you want a literal string.
-
-<!-- gitnexus:skip -- The generated block is deliberately absent: a background
-     `analyze` rewriting it churned this file and collided with the §11 block
-     (ADR-0009). The freshness hooks now pass --skip-agents-md. Do not restore
-     it by running a bare `gitnexus analyze`. -->

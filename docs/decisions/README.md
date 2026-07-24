@@ -23,4 +23,5 @@ template shape — risk owner, re-audit date, compensating controls.
 | [0006](0006-secret-scanner-gitleaks.md) | Secret scanner: stay on gitleaks (adopt core ADR-0015) | Accepted |
 | [0007](0007-snapshot-install.md) | Fresh installs use a snapshot, not migration replay | Accepted |
 | [0008](0008-knowledge-capture.md) | Knowledge capture ritual tail — spec §15 on the opencode host | Accepted |
-| [0009](0009-region-aware-spec-11-placement.md) | §11 is anchored region-aware: first `## ` or `gitnexus:start`, whichever comes first | Accepted |
+| [0009](0009-region-aware-spec-11-placement.md) | §11 is anchored region-aware: first `## ` or `gitnexus:start`, whichever comes first | Superseded by [0010] |
+| [0010](0010-openspec-superpowers-adoption.md) | Adopt the OpenSpec + Superpowers front end (spec v1.0.0), retiring the GSD planning engine | Accepted |

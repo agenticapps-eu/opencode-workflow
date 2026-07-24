@@ -1,7 +1,7 @@
 ---
 name: opencode-ts-declare-first
 version: 0.1.0
-implements_spec: 0.4.0
+implements_spec: 1.0.0
 implements_gate: tdd
 description: |
   Declare-first TypeScript discipline for new modules in TS-primary

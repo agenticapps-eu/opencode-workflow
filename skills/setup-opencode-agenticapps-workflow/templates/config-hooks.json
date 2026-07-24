@@ -1,137 +1,172 @@
 {
   "$schema": "https://github.com/agenticapps-eu/opencode-workflow/blob/main/templates/config-hooks.schema.json",
-  "implements_spec": "0.10.0",
+  "implements_spec": "1.0.0",
   "host": "opencode",
-  "hooks": {
-    "pre_execution": {
-      "plan_review": {
-        "skill": "/gsd-review (slash command from upstream gsd-opencode: commands/gsd/gsd-review.md)",
-        "fires_when": "phase has one or more *-PLAN.md and no *-SUMMARY.md exists for the resolved phase — fires before the first code-touching execution edit",
-        "evidence": "{phase}-REVIEWS.md in the phase directory, carrying independent plan review from at least two external AI reviewers",
-        "phase_resolution_order": [
-          "explicit phase pointer",
-          "workflow state (current_phase)",
-          "newest plan artifact by mtime",
-          "fail-open (allow)"
-        ],
-        "grandfather": "a *-SUMMARY.md for the resolved phase means the phase already executed — the gate allows the edit, so enabling enforcement never retroactively blocks work shipped before the gate functioned",
-        "implements_spec": "0.5.0"
+  "front_end": "openspec",
+  "openspec": {
+    "cli": "@fission-ai/openspec",
+    "init": "openspec init --tools opencode --profile core",
+    "profile": "core",
+    "slot": "openspec/ (specs/ current truth, changes/ in-flight deltas, changes/archive/ history)",
+    "commands": [
+      "/opsx:propose",
+      "/opsx:apply",
+      "/opsx:archive",
+      "/opsx:explore",
+      "/opsx:sync",
+      "/opsx:update"
+    ],
+    "note": "Bound upstream (spec §16): the CLI generates the opsx commands, skills, and slot into .opencode/ + openspec/. Not vendored or hand-authored. The installed CLI is authoritative over prose."
+  },
+  "lifecycle": {
+    "propose": {
+      "description": "Open an OpenSpec change (/opsx:propose): proposal, design note, spec delta, tasks. Superpowers brainstorming feeds the design note when the change introduces UI or new architecture (§17 stage 1).",
+      "conditional_gates": {
+        "brainstorm_ui": {
+          "skill": "superpowers:brainstorming",
+          "mode": "ui",
+          "fires_when": "change adds a UI surface and the design note lacks a Design alternatives section"
+        },
+        "brainstorm_architecture": {
+          "skill": "superpowers:brainstorming",
+          "mode": "architecture",
+          "fires_when": "change adds a new service/model/integration/data shape and the design note lacks an Architecture alternatives section"
+        },
+        "design_shotgun": {
+          "skill": "opencode-design-shotgun",
+          "fires_when": "change adds a UI surface with no UI-SPEC.md / design contract yet",
+          "min_variants": 3
+        }
       }
     },
-    "pre_phase": {
-      "brainstorm_ui": {
-        "skill": "superpowers:brainstorming",
-        "mode": "ui",
-        "fires_when": "phase has UI plan and CONTEXT.md lacks Design alternatives section"
+    "validate": {
+      "description": "openspec validate --all MUST be green AND the change MUST carry independent multi-AI review BEFORE any code (§17 stage 2). This single stage collapses the former plan-review and spec-review gates.",
+      "change_gate": {
+        "implements_spec": "1.0.0",
+        "spec_section": "18",
+        "script": "~/.agenticapps/bin/openspec-change-gate.sh",
+        "opencode_wiring": "~/.config/opencode/plugin/openspec-change-gate.ts (tool.execute.before; throws to block on exit 2)",
+        "floor": [
+          "git pre-commit (bin/git-hooks/pre-commit)",
+          "CI check (.github/workflows/ci.yml)"
+        ],
+        "requires": "active change with `openspec validate --all` green AND REVIEWS.md carrying >= 2 '## Reviewer:' headings",
+        "exempts": "openspec/** artifact writes (author the change while gated)",
+        "escape_hatch": "GSD_SKIP_REVIEWS=1 (documented, logged override)",
+        "fail_open": "malformed/unparseable stdin only (parse error, never policy)",
+        "block_when_cli_absent": true
       },
-      "brainstorm_architecture": {
-        "skill": "superpowers:brainstorming",
-        "mode": "architecture",
-        "fires_when": "phase introduces new service/model/integration/data shape and CONTEXT.md or RESEARCH.md lacks Architecture alternatives section"
-      },
-      "design_shotgun": {
-        "skill": "opencode-design-shotgun",
-        "fires_when": "phase has UI plan and no UI-SPEC.md exists for the surface",
-        "min_variants": 3
-      },
-      "design_critique": {
-        "skill": "opencode-design-critique",
-        "fires_when": "UI plan has UI-SPEC.md before implementation, OR as filter step in design-shotgun",
-        "quality_bar": 90
+      "multi_ai_review": {
+        "implements_spec": "1.0.0",
+        "producer": "opencode-openspec-change-review",
+        "wrapper": "bin/reviewer-cli.sh (</dev/null + timeout — codex-exec stdin-hang, PILOT-REPORT friction #3)",
+        "reviewers": ">= 2 DISTINCT external-vendor CLIs (e.g. gemini + codex)",
+        "target": "the active OpenSpec change (proposal + design + spec delta), BEFORE code",
+        "evidence": "openspec/changes/<slug>/REVIEWS.md — one '## Reviewer: <vendor>' section per reviewer",
+        "note": "Retargeted 0.x plan-review. Under spec 1.0.0 this is NOT a standalone gate (§17): its obligation is discharged here in stage 2 and enforced by the §18 change_gate. spec-review's structural role is now `openspec validate --all`."
       }
     },
-    "per_task": {
-      "tdd": {
-        "skill": "superpowers:test-driven-development",
-        "fires_when": "task carries tdd=\"true\" marker",
-        "commit_pair": [
-          "test(RED):",
-          "feat(GREEN):"
-        ],
-        "strengthened_by": {
-          "skill": "opencode-ts-declare-first",
-          "implements_spec": "0.4.0",
-          "fires_when": "task introduces a new TypeScript module's public API surface in a TS-primary project",
-          "commit_sequence": [
-            "declare(ts):",
-            "test(ts):",
-            "feat(ts):"
+    "execute": {
+      "description": "Superpowers-execute the change's tasks (§17 stage 3). The change_gate blocks code edits until stage 2 (validate + review) has passed for the active change.",
+      "retained": {
+        "tdd": {
+          "skill": "superpowers:test-driven-development",
+          "fires_when": "task carries tdd=\"true\" marker",
+          "commit_pair": [
+            "test(RED):",
+            "feat(GREEN):"
           ]
+        },
+        "verification": {
+          "skill": "superpowers:verification-before-completion",
+          "fires_when": "always — before any task transitions to complete",
+          "permitted_evidence_shapes": [
+            "test_output",
+            "grep_result",
+            "curl_response",
+            "screenshot_path",
+            "file_existence",
+            "diff_snippet"
+          ]
+        },
+        "code_review": {
+          "skill": "superpowers:requesting-code-review",
+          "fires_when": "always — after tasks, in independent agent context",
+          "stage": 2,
+          "mechanism": "opencode run child process",
+          "reviewer_model_env_var": "REVIEWER_MODEL",
+          "note": "Retained (§17): `openspec validate` is a spec check, not a code review, and does not discharge it."
+        },
+        "security": {
+          "skill": "opencode-cso",
+          "fires_when": "always on a change touching auth, storage, request handling, secrets, or an LLM trust boundary — never conditional-away in a product host",
+          "checks": "spec §14 (prompt-injection) on LLM-scoped changes"
         }
       },
-      "ui_preview": {
-        "skill": "opencode-qa",
-        "mode": "preview",
-        "fires_when": "task modifies a frontend component, route, or visual surface"
+      "conditional": {
+        "database_security": {
+          "skill": "opencode-database-sentinel-audit",
+          "mode": "change-scoped",
+          "fires_when": "change touches schema, RLS, definer functions, or storage policy (supabase|postgres|mongodb|firebase|mysql)",
+          "blocking_severity": [
+            "Critical",
+            "High"
+          ]
+        },
+        "db_pre_launch_audit": {
+          "skill": "opencode-database-sentinel-audit",
+          "mode": "pre-launch",
+          "fires_when": "before first production launch, after a major DB migration",
+          "scope": "full-surface",
+          "blocking_severity": [
+            "Critical",
+            "High"
+          ]
+        },
+        "qa": {
+          "skill": "opencode-qa",
+          "mode": "phase-qa",
+          "fires_when": "change ships user-visible behavior AND a dev server is reachable on a local port"
+        },
+        "ui_preview": {
+          "skill": "opencode-qa",
+          "mode": "preview",
+          "fires_when": "task modifies a frontend component, route, or visual surface"
+        },
+        "design_critique": {
+          "skill": "opencode-design-critique",
+          "fires_when": "UI change with an existing UI-SPEC.md, OR as the filter step in design_shotgun",
+          "quality_bar": 90
+        },
+        "impeccable_audit": {
+          "skill": "opencode-impeccable-audit",
+          "fires_when": "change alters a shipping visual surface",
+          "blocking_severity": [
+            "Red"
+          ],
+          "measured_trial": true,
+          "note": "Kept behind the ADR-0021 measured trial (MEASUREMENT.md) — do not remove yet."
+        }
       },
-      "verification": {
-        "skill": "superpowers:verification-before-completion",
-        "fires_when": "always — before any task transitions to complete",
-        "permitted_evidence_shapes": [
-          "test_output",
-          "grep_result",
-          "curl_response",
-          "screenshot_path",
-          "file_existence",
-          "diff_snippet"
-        ]
+      "lint": {
+        "ts_declare_first": {
+          "skill": "opencode-ts-declare-first",
+          "fires_when": "TS change introduces a new module's public API surface in a TS-primary project",
+          "enforcement": "CI lint gate",
+          "implements_spec": "1.0.0",
+          "note": "Demoted from a bespoke per-task gate to a lint gate (§17: ts-declare -> lint). Discipline retained; commit sequence declare(ts):/test(ts):/feat(ts): still recommended."
+        }
       }
     },
-    "post_phase": {
-      "spec_review": {
-        "skill": "opencode-spec-review",
-        "fires_when": "always — after all tasks complete, before phase verification",
-        "stage": 1
-      },
-      "code_review": {
-        "skill": "superpowers:requesting-code-review",
-        "fires_when": "always — after spec_review, in independent agent context",
-        "stage": 2,
-        "mechanism": "opencode run child process",
-        "reviewer_model_env_var": "REVIEWER_MODEL"
-      },
-      "security": {
-        "skill": "opencode-cso",
-        "fires_when": "diff touches auth, storage, request handling, secrets, LLM trust boundaries",
-        "sub_gates": [
-          {
-            "skill": "opencode-database-sentinel-audit",
-            "mode": "phase-scoped",
-            "fires_when": "scope matches supabase|postgres|mongodb|firebase|mysql",
-            "blocking_severity": [
-              "Critical",
-              "High"
-            ]
-          }
-        ]
-      },
-      "qa": {
-        "skill": "opencode-qa",
-        "mode": "phase-qa",
-        "fires_when": "phase ships user-visible behavior AND dev server reachable on local port"
-      },
-      "impeccable_audit": {
-        "skill": "opencode-impeccable-audit",
-        "fires_when": "diff modifies visual surface of shipping UI",
-        "blocking_severity": [
-          "Red"
-        ]
-      }
+    "archive": {
+      "description": "Fold the spec delta into openspec/specs/<capability>/spec.md so the slot states the new truth, then `openspec archive` the change into changes/archive/<date>-<slug>/.",
+      "rule": "archive != ship (§17): `openspec archive` folds the delta and moves the change dir but produces NO git commit."
     },
-    "finishing": {
-      "db_pre_launch_audit": {
-        "skill": "opencode-database-sentinel-audit",
-        "mode": "pre-launch",
-        "fires_when": "before first production launch, after major DB migration",
-        "scope": "full-surface",
-        "blocking_severity": [
-          "Critical",
-          "High"
-        ]
-      },
+    "ship": {
       "branch_close": {
         "skill": "superpowers:finishing-a-development-branch",
-        "fires_when": "feature branch ready to merge"
+        "fires_when": "the change is archived and the feature branch is ready to merge",
+        "note": "The ship step (git commit + changelog). PR body links changes/archive/<date>-<slug>/ and its evidence; SHOULD reference a Linear issue id for traceability (§19 loose coupling — never synchronized/required)."
       }
     }
   }

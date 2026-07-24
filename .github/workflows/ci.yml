@@ -29,7 +29,8 @@ jobs:
       - name: Shell syntax check
         run: |
           set -e
-          for s in install.sh migrations/check-snapshot-parity.sh migrations/run-tests.sh; do
+          for s in install.sh migrations/check-snapshot-parity.sh migrations/run-tests.sh \
+                   bin/openspec-change-gate.sh bin/reviewer-cli.sh bin/git-hooks/pre-commit; do
             bash -n "$s" && echo "ok: $s"
           done
 
@@ -39,10 +40,13 @@ jobs:
       - name: Migration tests
         run: bash migrations/run-tests.sh
 
-      - name: No residual Codex bindings in load-bearing files
+      - name: No residual Codex HOST bindings in load-bearing files
         run: |
           set -e
-          hits=$(grep -rniE '\.codex/|CODEX_HOME|CODEX_SKILLS|command -v codex|codex --version|"host": *"codex"' \
+          # Host-binding patterns only. `codex` as an external-vendor REVIEWER
+          # CLI (§18 multi-AI review) is legitimate, so the CLI-invocation forms
+          # (`codex --version`, `command -v codex`) are intentionally NOT matched.
+          hits=$(grep -rniE '\.codex/|CODEX_HOME|CODEX_SKILLS|"host": *"codex"' \
             AGENTS.md install.sh opencode.json .opencode/ \
             skills/ migrations/*.md .planning/config.json 2>/dev/null \
             | grep -v 'check-snapshot-parity' || true)
@@ -50,3 +54,18 @@ jobs:
             echo "Found residual Codex host bindings:"; echo "$hits"; exit 1
           fi
           echo "clean: no residual Codex bindings"
+
+      - name: No residual gitnexus in load-bearing files
+        run: |
+          set -e
+          # Scoped to LIVE surfaces only. Historical records (migrations/*.md,
+          # docs/decisions/*, CHANGELOG, the region-placement design doc) retain
+          # their gitnexus references per §08 supersede-don't-delete, and
+          # .opencode/session-handoff.md is a gitignored working artifact.
+          hits=$(grep -rniE 'gitnexus' \
+            AGENTS.md CLAUDE.md install.sh opencode.json \
+            skills/ bin/ .planning/config.json 2>/dev/null || true)
+          if [ -n "$hits" ]; then
+            echo "Found residual gitnexus in live surfaces:"; echo "$hits"; exit 1
+          fi
+          echo "clean: no residual gitnexus in live surfaces"

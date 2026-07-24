@@ -1,7 +1,7 @@
 ---
 name: update-opencode-agenticapps-workflow
-version: 0.1.0
-implements_spec: 0.4.0
+version: 0.2.0
+implements_spec: 1.0.0
 description: |
   Update an installed opencode-workflow project to the current scaffolder
   version by applying pending migrations between the project's
@@ -21,6 +21,16 @@ This skill is the entry point for upgrading an installed opencode-workflow
 project to a newer scaffolder version. It applies only **pending**
 migrations — those whose `from_version >` the project's
 recorded version.
+
+> **Note — migration 0011 (v0.6.0 → 1.0.0) is a front-end replacement.**
+> It binds the OpenSpec + Superpowers front end (spec §16–§19): it needs
+> the `openspec` CLI and ≥2 external-vendor reviewer CLIs (walked via the
+> migration's `requires` in Stage B), restructures `.planning/config.json`
+> to the lifecycle model, installs the §18 change-gate, and — for a
+> brownfield project with a `.planning/phases/` tree — runs the core
+> `planning→openspec` recipe (`docs/recipes/0001-planning-to-openspec.md`,
+> Tier 0 move → Tier 1 archive → Tier 2 supervised spec reconstruction).
+> Review its diff preview carefully; it is the largest migration in the chain.
 
 ## When to invoke
 

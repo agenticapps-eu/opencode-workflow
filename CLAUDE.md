@@ -1,6 +1,12 @@
-## Reindexing
+# CLAUDE.md — opencode-workflow
 
-Always reindex with `npx gitnexus analyze --skip-agents-md`, never bare — despite
-what the generated block above says. A bare `analyze` rewrites the managed region
-in this file *and* re-injects the one deliberately removed from `AGENTS.md`. The
-counts above are frozen on purpose and will drift; that is the intended trade.
+This repo is the **opencode** host scaffolder for the AgenticApps spec-first
+workflow. Its canonical instruction file is [`AGENTS.md`](./AGENTS.md) — the
+Coding Discipline, the OpenSpec development loop, and the session-handoff
+protocol all live there and apply when working on this repo with any agent
+(Claude Code included). Read `AGENTS.md` first.
+
+The workflow itself is explained in
+[`docs/WORKFLOW.md`](./docs/WORKFLOW.md); the normative standard is the
+[`agenticapps-workflow-core`](https://github.com/agenticapps-eu/agenticapps-workflow-core)
+spec that this host `implements_spec`.
