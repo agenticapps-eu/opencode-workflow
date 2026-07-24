@@ -1,7 +1,7 @@
 ---
 name: opencode-database-sentinel-audit
 version: 0.1.0
-implements_spec: 0.4.0
+implements_spec: 1.0.0
 implements_gate: database-security, db-pre-launch-audit
 description: |
   Database-specialist security audit in two modes. **phase-scoped

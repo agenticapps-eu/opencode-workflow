@@ -82,11 +82,15 @@ session-level discipline the model brings to every diff.
 
 ## Development Workflow
 
-This repo uses the AgenticApps spec-first workflow on the opencode host.
-On any code-touching task the `agentic-apps-workflow` trigger skill
-activates, emits the canonical commitment ritual before any tool call,
-and carries the gate bindings, task-size routing, plan-review, and
-knowledge-capture procedures — read them there, not here.
+This repo uses the AgenticApps spec-first workflow (OpenSpec +
+Superpowers, spec v1.0.0) on the opencode host. Product work moves
+through an OpenSpec change — propose → validate → execute → archive →
+ship — while the §18 change-gate refuses code edits until the active
+change has validated and been reviewed. On any code-touching task the
+`agentic-apps-workflow` trigger skill activates, emits the commitment
+ritual before any tool call, and carries the lifecycle routing, gate
+bindings, and knowledge-capture procedures — read them there, and see
+[`docs/WORKFLOW.md`](docs/WORKFLOW.md) for the explainer.
 Project-specific bindings live in `.planning/config.json`; gates that do
 not fire on this project are documented in `docs/ENFORCEMENT-PLAN.md`.
 Do not bypass a gate — accept-via-ADR is the override path. Spec:
