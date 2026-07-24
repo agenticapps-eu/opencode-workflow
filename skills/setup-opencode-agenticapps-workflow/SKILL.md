@@ -1,7 +1,7 @@
 ---
 name: setup-opencode-agenticapps-workflow
-version: 0.3.0
-implements_spec: 0.4.0
+version: 0.4.0
+implements_spec: 1.0.0
 description: |
   Bootstrap a fresh project with the opencode-workflow scaffolding by
   installing the LATEST snapshot directly — no migration replay. Lays
@@ -145,19 +145,10 @@ present); in interactive mode show the diff before writing.
    <!-- END: agentic-apps-workflow sections -->
    ```
 
-   **Always place the pair ABOVE a leading `<!-- gitnexus:start -->`
-   region** (migration `0009`). In an `AGENTS.md` that leads with a
-   GitNexus block, the first title is GitNexus's own
-   `# GitNexus — Code Intelligence` H1 *inside* the region — so "after
-   any existing title" would put the workflow section in the region, and
-   the next `gitnexus analyze` regenerates that region and destroys it
-   silently. If a region leads the file, insert above
-   `<!-- gitnexus:start -->`.
-
-   §11 needs no separate anchoring here: it is pre-baked at the top of
-   `$SNAP/agents-block.md`, so it rides wherever the pair lands. That is
-   why this path carries no first-`## ` anchor and needs no anchor-parity
-   guard against `0009` — see ADR-0009.
+   Place the pair at the top, after any existing H1 title. §11 is
+   pre-baked at the top of `$SNAP/agents-block.md`, so it rides wherever
+   the pair lands. (The old region-placement guard — for a now-removed
+   code-index MCP — is retired as of spec 1.0.0; see ADR-0010.)
 
    If the markers already exist, replace the content between them with
    `$SNAP/agents-block.md` (this is also how `update` refreshes the
@@ -177,13 +168,47 @@ present); in interactive mode show the diff before writing.
     so the project starts current; `update` will only ever apply
     migrations newer than `$LATEST`.
 
+### Stage C.5 — OpenSpec front end (spec 1.0.0, §16–§18)
+
+12b. **Initialize the spec slot + opsx commands.** Run
+     `openspec init --tools opencode --profile core` in the project. The
+     CLI is `@fission-ai/openspec`; if absent, instruct
+     `npm i -g @fission-ai/openspec` and continue. This generates the
+     `openspec/{specs,changes,changes/archive}` slot + `openspec/config.yaml`,
+     and the six `/opsx:*` commands + `openspec-*` skills under `.opencode/`.
+     Bound **upstream** (§16) — the CLI generates these; never vendor or
+     hand-edit them. Record the CLI version.
+
+12c. **Wire the change-gate floor (§18).** The global gate script + opencode
+     plugin were installed once by `install.sh`
+     (`~/.agenticapps/bin/openspec-change-gate.sh`,
+     `~/.config/opencode/plugin/openspec-change-gate.ts`). Install this
+     project's git pre-commit floor from the staged global copy:
+     ```bash
+     hookdir="$(git rev-parse --git-path hooks)"
+     install -m 0755 "$HOME/.agenticapps/git-hooks/pre-commit" "$hookdir/pre-commit"
+     ```
+
+12d. **Brownfield: migrate `.planning/` → OpenSpec.** If the project has a
+     `.planning/phases/` tree (a 0.x GSD project), run the core
+     `planning→openspec` recipe (`docs/recipes/0001-planning-to-openspec.md`):
+     Tier 0 moves `.planning/` to `docs/legacy-planning/` (never deleted),
+     Tier 1 converts each completed phase to an archived change, Tier 2
+     reconstructs `specs/<capability>/` by a human-supervised merge
+     (merge-not-mirror, §19). Greenfield (no `.planning/phases/`) → skip
+     Tiers 0–1, author `specs/` directly. `openspec validate --all` must be
+     green with no `[GAP:]` left before any change is archive-folded.
+
 ### Stage D — Post-checks and commit
 
 13. **Post-checks:**
     - `.opencode/workflow-config.md` exists, no unsubstituted `{{...}}`
-    - `.planning/config.json` is valid JSON with the expected `hooks`
-      keys, and a `knowledge_capture` block whose `note` has the
-      `<repo-name>` placeholder resolved (no literal `<repo-name>`)
+    - `.planning/config.json` is valid JSON with the expected `lifecycle`
+      keys (propose/validate/execute/archive/ship), and a
+      `knowledge_capture` block whose `note` has the `<repo-name>`
+      placeholder resolved (no literal `<repo-name>`)
+    - `openspec/` exists with `specs/`, `changes/`, `changes/archive/`,
+      and `openspec validate --all` is green
     - `AGENTS.md` contains exactly one `BEGIN/END: agentic-apps-workflow`
       marker pair, and the body contains the §11 "Coding Discipline"
       heading (proves the latest snapshot, not the v0.1.0 baseline) and
@@ -194,20 +219,21 @@ present); in interactive mode show the diff before writing.
 14. **Atomic commit:**
 
     ```bash
-    git add .opencode/ .planning/ AGENTS.md docs/decisions/
-    git commit -m "chore: install opencode-workflow v$LATEST (snapshot)"
+    git add .opencode/ .planning/ AGENTS.md docs/decisions/ openspec/
+    git commit -m "chore: install opencode-workflow v$LATEST (OpenSpec + snapshot)"
     ```
 
 15. **Surface follow-ups:**
     - Project is now at `opencode-workflow v$LATEST`
-     - Next: `/gsd-discuss-phase 1` to start the first phase
+     - Next: `/opsx:propose "<idea>"` to open your first OpenSpec change
     - Future updates: `$update-opencode-agenticapps-workflow` reads
       `.opencode/workflow-version.txt` and applies pending migrations
 
 ## Required evidence (per spec/06)
 
 - `.opencode/workflow-version.txt` exists, content == scaffolder `VERSION`
-- `.planning/config.json` valid JSON with all `hooks` keys
+- `.planning/config.json` valid JSON with all `lifecycle` keys
+- `openspec/` slot exists and `openspec validate --all` is green
 - `AGENTS.md` has the marker pair and the §11 heading inside it
 - `docs/decisions/README.md` exists
 - The atomic commit is on the current branch with the expected files

@@ -1,5 +1,17 @@
 # Enforcement Plan — opencode-workflow
 
+> **Updated for spec v1.0.0 (OpenSpec + Superpowers).** The gate model is
+> now the §17 lifecycle mapping (propose → validate → execute → archive →
+> ship): `plan-review` and `spec-review` **collapse into validate** (the
+> §18 change-gate + the `opencode-openspec-change-review` producer);
+> `code-review`/`tdd`/`verification`/`security` are retained; design/db/qa/
+> impeccable are conditional; `ts-declare` is a lint. The current, canonical
+> sources are [`docs/WORKFLOW.md`](WORKFLOW.md), the trigger skill's
+> **Step 3** table, and [ADR-0010](decisions/0010-openspec-superpowers-adoption.md).
+> The "gates whose trigger cannot occur" table below remains current; the
+> narrative of how this scaffolder was built (Phases 0–6) is retained as
+> history.
+
 This document records which `agenticapps-workflow-core/spec/02-hook-taxonomy.md`
 gates fire for `opencode-workflow`'s **own** development, which gates do not
 apply (with rationale), and which skill is bound to each. Gates marked
@@ -98,9 +110,9 @@ build-out (`docs/dogfood-2026-05-10.md`).
 | `brainstorm-architecture` | `superpowers:brainstorming` (Superpowers, architecture mode) | Adding a new skill, template, or migration | The Phase 0 ADR set is the reference shape |
 | `tdd` | `superpowers:test-driven-development` (Superpowers) | Any task adding logic to `install.sh` or `migrations/run-tests.sh` | Markdown content (skills, templates, ADRs) does not require TDD |
 | `tdd` (new TS module) | `opencode-ts-declare-first` | A new TypeScript module's public API surface (spec §13) | Strengthens `tdd`: three atomic commits `declare(ts):` → `test(ts):` (RED) → `feat(ts):` (GREEN). Does not fire on this markdown scaffolder; bound for downstream TS projects |
-| `plan-review` | `/gsd-review` (GSD, upstream — a slash **command** at `commands/gsd/gsd-review.md`, not a skill under `skills/`) | A phase has one or more `*-PLAN.md` and no `*-SUMMARY.md` — before the first code-touching edit | Evidence: `{phase}-REVIEWS.md` from ≥2 external AI reviewers. Resolution order and grandfather rule per spec §02 / core ADR-0025 |
+| `plan-review` → **collapsed into validate** | `opencode-openspec-change-review` (producer) + the §18 change-gate | Before code, on the active OpenSpec change | Evidence: `openspec/changes/<slug>/REVIEWS.md` from ≥2 external-vendor reviewers. Not a standalone gate under 1.0.0 (§17) — enforced by `~/.agenticapps/bin/openspec-change-gate.sh` |
 | `verification` | `superpowers:verification-before-completion` (Superpowers) | Always — every PR | Evidence shapes here are typically grep results, file existence, and `run-tests.sh` output |
-| `spec-review` | `opencode-spec-review` | Always — every PR | Stage 1 of two-stage review |
+| `spec-review` → **collapsed into validate** | `openspec validate --all` | Before code, on the active change | The machine check the §18 change-gate calls; the former Stage-1 "spec compliance" pass |
 | `code-review` | `superpowers:requesting-code-review` (Superpowers) | Always — every PR | Stage 2; `opencode run` child process per ADR-0002 |
 | `security` | `opencode-cso` | When changing `install.sh` or any executable script | OWASP-aligned scan; for a scaffolder the relevant axes are: command injection, path traversal, secret exposure, unsafe `eval` of remote content |
 | `branch-close` | `superpowers:finishing-a-development-branch` (Superpowers) | Every PR | The PRs for Phases 1–6 each demonstrate this binding |

@@ -274,10 +274,13 @@ echo "  ${GREEN}GATE${RESET}   $AA_BIN/reviewer-cli.sh           (reviewer-CLI w
 echo "  ${GREEN}HOOK${RESET}   $OPENCODE_PLUGIN_DIR/openspec-change-gate.ts  (opencode tool.execute.before)"
 echo "  ${GREEN}HOOK${RESET}   .git/hooks/pre-commit             (agent-agnostic floor)"
 if [ "$DRY_RUN" -eq 0 ]; then
-  mkdir -p "$AA_BIN" "$OPENCODE_PLUGIN_DIR"
+  mkdir -p "$AA_BIN" "$OPENCODE_PLUGIN_DIR" "$HOME/.agenticapps/git-hooks"
   install -m 0755 "$SCAFFOLDER_ROOT/bin/openspec-change-gate.sh" "$AA_BIN/openspec-change-gate.sh"
   install -m 0755 "$SCAFFOLDER_ROOT/bin/reviewer-cli.sh"         "$AA_BIN/reviewer-cli.sh"
   install -m 0644 "$SCAFFOLDER_ROOT/bin/openspec-change-gate.ts" "$OPENCODE_PLUGIN_DIR/openspec-change-gate.ts"
+  # Stage the pre-commit at a stable global path so the per-project setup skill
+  # can install it into each target repo's .git/hooks.
+  install -m 0755 "$SCAFFOLDER_ROOT/bin/git-hooks/pre-commit"    "$HOME/.agenticapps/git-hooks/pre-commit"
   if [ -d "$SCAFFOLDER_ROOT/.git" ] || [ -f "$SCAFFOLDER_ROOT/.git" ]; then
     hookrel="$(git -C "$SCAFFOLDER_ROOT" rev-parse --git-path hooks 2>/dev/null)"
     if [ -n "$hookrel" ]; then
