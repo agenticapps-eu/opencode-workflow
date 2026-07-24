@@ -8,9 +8,9 @@
 // (the truth table, validate + REVIEWS.md >=2, escape hatch, fail-open) lives
 // in the shell script so every host enforces identical behavior.
 //
-// Precedent for the mechanism: ~/.config/opencode/plugin/gitnexus-freshness.ts
-// (uses tool.execute.after, observe-only). This one uses tool.execute.before
-// and can deny, because throwing from a before-hook aborts the tool call.
+// Mechanism precedent: an observe-only tool.execute.after plugin already ships
+// in this fleet's opencode config. This one uses tool.execute.before and can
+// DENY, because throwing from a before-hook aborts the tool call.
 //
 // A hook cannot gate the session that installed it (opencode loads plugins at
 // session start) — so this enforces live for the NEXT session; the git

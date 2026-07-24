@@ -115,15 +115,3 @@ days; write it before ending a session. Only the opencode handoff —
 never another host's. Full protocol in the trigger skill.
 
 <!-- END: agentic-apps-workflow sections -->
-
-## Code Intelligence
-
-This repo is indexed by GitNexus. To find *where* something lives, query the graph
-first — `gitnexus_query` for a concept, `gitnexus_context` for a known symbol,
-`gitnexus_impact` before you change one — rather than grepping blind. Fall back to
-text search when the graph has no answer or you want a literal string.
-
-<!-- gitnexus:skip -- The generated block is deliberately absent: a background
-     `analyze` rewriting it churned this file and collided with the §11 block
-     (ADR-0009). The freshness hooks now pass --skip-agents-md. Do not restore
-     it by running a bare `gitnexus analyze`. -->

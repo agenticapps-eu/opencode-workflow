@@ -114,14 +114,7 @@ this path.
 > Verify the model id and base URL with `opencode models` before a long
 > run — provider ids and GLM build numbers move quickly.
 
-## 7. gitnexus MCP (optional)
-
-`opencode.json` registers gitnexus as a local MCP server with
-`npx -y gitnexus mcp`. Confirm the exact subcommand your gitnexus
-version exposes (`npx gitnexus --help`); if it differs, edit the
-`mcp.gitnexus.command` array. Set `"enabled": false` to skip it.
-
-## 8. Smoke test
+## 7. Smoke test
 
 ```bash
 opencode run "set up the workflow"     # should trigger setup-opencode-agenticapps-workflow

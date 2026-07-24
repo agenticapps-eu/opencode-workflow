@@ -43,8 +43,7 @@ z.ai provider. Zen serves it under the built-in id **`opencode/glm-5.2`**
 provides only:
 
 - `"model": "opencode/glm-5.2"` (the Zen id),
-- the Superpowers `plugin` entry,
-- the `gitnexus` MCP server.
+- the Superpowers `plugin` entry.
 
 **Auth (this is what causes "token expired or incorrect"):** the Zen key is not
 a z.ai key and must be registered through opencode's auth, *not* an env var:
