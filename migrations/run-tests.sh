@@ -581,7 +581,7 @@ test_migration_0006() {
     local label; label="$(basename "$(dirname "$f")")/$(basename "$f")"
     if jq -e --arg claim "$claim" \
          '(.implements_spec == $claim)
-          and (.hooks.per_task.tdd.strengthened_by.skill == "opencode-ts-declare-first")' \
+          and (.lifecycle.execute.lint.ts_declare_first.skill == "opencode-ts-declare-first")' \
          "$f" >/dev/null 2>&1; then
       echo "  ${GREEN}PASS${RESET} $label: claim mirrors SKILL.md ($claim) AND §13 binding present"
       PASS=$((PASS+1))
@@ -594,7 +594,7 @@ test_migration_0006() {
   # The base tdd binding must not be clobbered by the strengthener. 57df04d
   # rebound it upstream (opencode-tdd -> superpowers:test-driven-development)
   # without a migration; 0002's post-check was corrected to match in 0006.
-  if jq -e '.hooks.per_task.tdd.skill == "superpowers:test-driven-development"' \
+  if jq -e '.lifecycle.execute.retained.tdd.skill == "superpowers:test-driven-development"' \
        "$snap" >/dev/null 2>&1; then
     echo "  ${GREEN}PASS${RESET} base tdd binding intact (upstream superpowers skill)"
     PASS=$((PASS+1))
@@ -657,35 +657,35 @@ test_migration_0007() {
   local snap="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/snapshot/planning-config.json"
   local tpl="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/templates/config-hooks.json"
 
-  # §02 (0.5.0) — plan-review bound on BOTH seeding paths, with the two
-  # sub-requirements §02 makes normative: robust resolution order (a single
-  # mutable pointer is non-conformant, core ADR-0025) and the grandfather rule.
-  # Binding asserted by what it RESOLVES TO, not by an exact literal — 0008
-  # re-labelled it to the annotated slash form. Pinning the string here would
-  # make this a tripwire on its own successor, which is the mistake 0006's test
-  # made and 0007 had to fix.
+  # §02 plan-review + spec-review COLLAPSED into validate under spec 1.0.0
+  # (0011 superseded 0007's standalone binding, spec §17). The multi-AI review
+  # survives as the §18 change-gate predicate + the review producer, and no
+  # standalone plan_review remains — asserted on BOTH seeding paths + live.
   for f in "$snap" "$tpl" "$REPO_ROOT/.planning/config.json"; do
     local label; label="$(basename "$(dirname "$f")")/$(basename "$f")"
-    if jq -e '(.hooks.pre_execution.plan_review.skill | test("gsd-review"))
-              and ((.hooks.pre_execution.plan_review.phase_resolution_order | length) == 4)
-              and (.hooks.pre_execution.plan_review.grandfather | test("SUMMARY"))' \
+    if jq -e '(.lifecycle.validate.change_gate.script | test("openspec-change-gate"))
+              and (.lifecycle.validate.multi_ai_review.producer == "opencode-openspec-change-review")
+              and ((.hooks.pre_execution.plan_review // null) == null)' \
          "$f" >/dev/null 2>&1; then
-      echo "  ${GREEN}PASS${RESET} $label: plan-review bound (resolution order + grandfather)"
+      echo "  ${GREEN}PASS${RESET} $label: plan/spec-review collapsed into validate (change-gate + producer)"
       PASS=$((PASS+1))
     else
-      echo "  ${RED}FAIL${RESET} $label: plan-review gate missing or incomplete"
+      echo "  ${RED}FAIL${RESET} $label: validate-stage collapse missing (change-gate/producer/no standalone plan-review)"
       FAIL=$((FAIL+1))
     fi
   done
 
-  # The claim, and 0006's invariant that the config mirrors it.
-  if grep -q '^implements_spec: 0.10.0$' "$skill" \
-     && jq -e '.implements_spec == "0.10.0"' "$REPO_ROOT/.planning/config.json" >/dev/null 2>&1 \
-     && jq -e '.implements_spec == "0.10.0"' "$snap" >/dev/null 2>&1; then
-    echo "  ${GREEN}PASS${RESET} claim 0.10.0 mirrored across SKILL.md, config, snapshot"
+  # The claim, and 0006's invariant that the config mirrors it. Version-agnostic:
+  # 0007 pinned 0.10.0; 0011 bumped to 1.0.0. Assert MIRRORING, not a literal —
+  # pinning a version here is the tripwire the 0006/0007 comments warn against.
+  local claim07; claim07="$(sed -n 's/^implements_spec: //p' "$skill" | head -1)"
+  if [ -n "$claim07" ] \
+     && jq -e --arg c "$claim07" '.implements_spec == $c' "$REPO_ROOT/.planning/config.json" >/dev/null 2>&1 \
+     && jq -e --arg c "$claim07" '.implements_spec == $c' "$snap" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} claim $claim07 mirrored across SKILL.md, config, snapshot"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} claim not 0.10.0 or not mirrored (0006 invariant broken)"
+    echo "  ${RED}FAIL${RESET} claim not mirrored across SKILL.md/config/snapshot (0006 invariant broken)"
     FAIL=$((FAIL+1))
   fi
 
@@ -701,8 +701,8 @@ test_migration_0007() {
     FAIL=$((FAIL+1))
   fi
 
-  # §14 (0.6.0) — declared, since the trigger cannot occur here.
-  if grep -q '^## Spec deltas (spec 0.10.0)' "$skill" && grep -q '§14' "$skill"; then
+  # §14 — declared, since the trigger cannot occur here. Version-agnostic heading.
+  if grep -qE '^## Spec deltas \(spec [0-9.]+\)' "$skill" && grep -q '§14' "$skill"; then
     echo "  ${GREEN}PASS${RESET} §14 declared in Spec deltas"
     PASS=$((PASS+1))
   else
@@ -710,12 +710,13 @@ test_migration_0007() {
     FAIL=$((FAIL+1))
   fi
 
-  # §09 gate count — core 0.9.0 corrected 15 -> 16 (plan-review was never counted).
-  if grep -q '^The 16 gates from$' "$skill"; then
-    echo "  ${GREEN}PASS${RESET} gate count says 16 (§09 fix, core 0.9.0)"
+  # §17 (1.0.0) — the §02 gates are REMAPPED onto the lifecycle (collapsed/
+  # retained/conditional), superseding 0007's flat "16 gates" enumeration.
+  if grep -q 'remapped' "$skill" && grep -qi 'lifecycle' "$skill"; then
+    echo "  ${GREEN}PASS${RESET} §17 gate remapping present in trigger skill"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} gate count stale — §02 enumerates 16"
+    echo "  ${RED}FAIL${RESET} §17 gate remapping missing from trigger skill"
     FAIL=$((FAIL+1))
   fi
 }
@@ -743,25 +744,24 @@ test_migration_0008() {
   local snap="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/snapshot/planning-config.json"
   local tpl="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/templates/config-hooks.json"
 
-  # A GSD entry point is a slash command, not a $skill. Every gate bound to one
-  # must say so in slash form — the idiom the trigger's Step 2 routing already
-  # uses for /gsd-discuss-phase, /gsd-plan-phase, /gsd-execute-phase.
+  # 0008's theme survives into 1.0.0: a binding must name a real, findable thing.
+  # Its 1.0.0 analog is the §18 change-gate binding, which must point at the
+  # actual enforcement script (not a bare skill name), on ALL seeding paths.
   for f in "$snap" "$tpl" "$REPO_ROOT/.planning/config.json"; do
     local label; label="$(basename "$(dirname "$f")")/$(basename "$f")"
-    if jq -e '.hooks.pre_execution.plan_review.skill | startswith("/gsd-review")' \
+    if jq -e '.lifecycle.validate.change_gate.script | test("openspec-change-gate\\.sh$")' \
          "$f" >/dev/null 2>&1; then
-      echo "  ${GREEN}PASS${RESET} $label: plan-review names /gsd-review (slash-command form)"
+      echo "  ${GREEN}PASS${RESET} $label: change-gate names its real script (openspec-change-gate.sh)"
       PASS=$((PASS+1))
     else
-      echo "  ${RED}FAIL${RESET} $label: plan-review binding is not in slash-command form"
+      echo "  ${RED}FAIL${RESET} $label: change-gate binding does not name the enforcement script"
       FAIL=$((FAIL+1))
     fi
   done
 
-  # The generalized rule: no binding may name a bare `gsd-*` as though it were a
-  # skill. gsd-opencode ships gsd-* as commands (commands/gsd/*.md); the only
-  # gsd-* under skills/ are gsd-code-review / gsd-ui-review, which this host does
-  # not bind. A bare gsd-* value here means someone repeated 0007's mistake.
+  # The generalized rule (0008): no binding may name a bare `gsd-*` as though it
+  # were a skill. Under 1.0.0 the GSD entry points are gone entirely, so this is
+  # now trivially — and permanently — true; a bare gsd-* value would be a regression.
   local bare
   bare="$(jq -r '[.. | objects | select(has("skill")) | .skill]
                  | map(select(type == "string" and test("^gsd-")))
@@ -774,12 +774,16 @@ test_migration_0008() {
     FAIL=$((FAIL+1))
   fi
 
-  # The claim must NOT have moved — 0008 corrects a label, not conformance.
-  if grep -q '^implements_spec: 0.10.0$' "$REPO_ROOT/skills/agentic-apps-workflow/SKILL.md"; then
-    echo "  ${GREEN}PASS${RESET} conformance claim at 0.10.0 (0008 itself moved nothing)"
+  # 0008's core concern: a reader must be able to FIND the bound thing. The
+  # multi-AI review producer the config names MUST exist under skills/ (this is
+  # exactly the check whose absence let gsd-review look dead in 0007).
+  local producer
+  producer="$(jq -r '.lifecycle.validate.multi_ai_review.producer // empty' "$REPO_ROOT/.planning/config.json" 2>/dev/null)"
+  if [ -n "$producer" ] && [ -d "$REPO_ROOT/skills/$producer" ]; then
+    echo "  ${GREEN}PASS${RESET} review producer '$producer' is bound AND exists under skills/"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} claim moved — 0008 must not touch implements_spec"
+    echo "  ${RED}FAIL${RESET} review producer binding names a non-existent skill: '$producer'"
     FAIL=$((FAIL+1))
   fi
 }
@@ -1311,6 +1315,141 @@ test_migration_0009() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Migration 0011 — bind OpenSpec + Superpowers (v0.6.0 -> 1.0.0).
+#
+# Asserts the 1.0.0 end-state: the config is on the OpenSpec lifecycle with the
+# §18 change-gate + multi-AI review producer, no standalone plan/spec-review, the
+# enforcement artifacts exist, and gitnexus is gone from live config.
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_migration_0011() {
+  echo ""
+  echo "${YELLOW}=== Migration 0011 — bind OpenSpec + Superpowers (v1.0.0) ===${RESET}"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "  ${YELLOW}SKIP${RESET} jq not available — 0011 end-state test not run"
+    SKIP=$((SKIP+1)); return
+  fi
+
+  local skill="$REPO_ROOT/skills/agentic-apps-workflow/SKILL.md"
+  local cfg="$REPO_ROOT/.planning/config.json"
+  local snap="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/snapshot/planning-config.json"
+
+  # 1) Lifecycle shape + front end, on live and snapshot.
+  for f in "$cfg" "$snap"; do
+    local label; label="$(basename "$(dirname "$f")")/$(basename "$f")"
+    if jq -e '(.front_end == "openspec")
+              and (.openspec.init | test("openspec init"))
+              and (.lifecycle.validate.change_gate)
+              and (.lifecycle.validate.multi_ai_review)
+              and (.lifecycle.execute.retained.security)
+              and (.lifecycle.execute.lint.ts_declare_first)
+              and ((.hooks // null) == null)' \
+         "$f" >/dev/null 2>&1; then
+      echo "  ${GREEN}PASS${RESET} $label: OpenSpec lifecycle shape (validate/execute, no legacy hooks)"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} $label: OpenSpec lifecycle shape incomplete"
+      FAIL=$((FAIL+1))
+    fi
+  done
+
+  # 2) Claim bumped to 1.0.0, mirrored.
+  if grep -q '^implements_spec: 1.0.0$' "$skill" \
+     && jq -e '.implements_spec == "1.0.0"' "$cfg" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} implements_spec 1.0.0 in SKILL.md and config"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} implements_spec not 1.0.0 across SKILL.md/config"
+    FAIL=$((FAIL+1))
+  fi
+
+  # 3) Gate collapse: producer skill exists, spec-review skill gone.
+  if [ -d "$REPO_ROOT/skills/opencode-openspec-change-review" ] \
+     && [ ! -d "$REPO_ROOT/skills/opencode-spec-review" ]; then
+    echo "  ${GREEN}PASS${RESET} review producer added; opencode-spec-review collapsed"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} gate collapse incomplete (producer missing or spec-review still present)"
+    FAIL=$((FAIL+1))
+  fi
+
+  # 4) Enforcement artifacts exist.
+  if [ -x "$REPO_ROOT/bin/openspec-change-gate.sh" ] \
+     && [ -f "$REPO_ROOT/bin/openspec-change-gate.ts" ] \
+     && [ -x "$REPO_ROOT/bin/reviewer-cli.sh" ] \
+     && [ -x "$REPO_ROOT/bin/git-hooks/pre-commit" ]; then
+    echo "  ${GREEN}PASS${RESET} §18 gate script, plugin, reviewer wrapper, pre-commit all present"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} one or more §18 enforcement artifacts missing under bin/"
+    FAIL=$((FAIL+1))
+  fi
+
+  # 5) gitnexus is gone from live config.
+  if ! jq -e '.mcp.gitnexus' "$REPO_ROOT/opencode.json" >/dev/null 2>&1 \
+     && [ ! -d "$REPO_ROOT/.claude/skills/gitnexus" ]; then
+    echo "  ${GREEN}PASS${RESET} gitnexus absent from opencode.json and .claude/skills"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} gitnexus still present in live config"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# §18 change-gate — the exit-code truth table (spec §18), by direct invocation
+# with simulated payloads. openspec is stubbed so the reviewer/validate branches
+# run without the CLI installed. This is the recipe-0001 fixture deliverable.
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_change_gate() {
+  echo ""
+  echo "${YELLOW}=== §18 change-gate — exit-code truth table ===${RESET}"
+
+  local gate="$REPO_ROOT/bin/openspec-change-gate.sh"
+  if [ ! -x "$gate" ]; then
+    echo "  ${RED}FAIL${RESET} gate script missing: $gate"; FAIL=$((FAIL+1)); return
+  fi
+
+  local t; t="$(mktemp -d)"
+  # Stub openspec: `validate` exits $OSTUB_RC (default 0).
+  mkdir -p "$t/stub"
+  printf '#!/usr/bin/env bash\n[ "$1" = "validate" ] && exit "${OSTUB_RC:-0}"\nexit 0\n' > "$t/stub/openspec"
+  chmod +x "$t/stub/openspec"
+
+  # Run the gate inside $t with the stub on PATH; assert the exit code.
+  _g() { # $1 label  $2 payload  $3 expected-exit  [$4 extra-env]
+    local rc
+    ( cd "$t" && printf '%s' "$2" | env PATH="$t/stub:$PATH" ${4:-} "$gate" >/dev/null 2>&1 )
+    rc=$?
+    if [ "$rc" -eq "$3" ]; then
+      echo "  ${GREEN}PASS${RESET} $1 (exit $rc)"; PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} $1 (exit $rc, expected $3)"; FAIL=$((FAIL+1))
+    fi
+  }
+
+  local EDIT='{"tool":"edit","tool_input":{"file_path":"classify.go"}}'
+
+  _g "no openspec/ -> allow"            "$EDIT" 0
+  mkdir -p "$t/openspec/changes/archive"
+  _g "no active change -> allow"        "$EDIT" 0
+  _g "openspec/** write -> exempt"      '{"tool":"write","tool_input":{"file_path":"openspec/changes/c/proposal.md"}}' 0
+  _g "escape hatch -> allow"            "$EDIT" 0 "GSD_SKIP_REVIEWS=1"
+  _g "garbage stdin -> allow"           'not json $$$' 0
+  mkdir -p "$t/openspec/changes/add-thing"
+  _g "active, validate green, 0 reviews -> block" "$EDIT" 2
+  printf '## Reviewer: gemini\nAPPROVE\n' > "$t/openspec/changes/add-thing/REVIEWS.md"
+  _g "active, 1 reviewer -> block"      "$EDIT" 2
+  printf '## Reviewer: gemini\nAPPROVE\n## Reviewer: codex\nAPPROVE\n' > "$t/openspec/changes/add-thing/REVIEWS.md"
+  _g "active, 2 reviewers -> allow"     "$EDIT" 0
+  _g "validate FAILS, 2 reviewers -> block" "$EDIT" 2 "OSTUB_RC=1"
+
+  rm -rf "$t"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Drift test — the scaffolder's SKILL.md version MUST equal the latest
 # migration's to_version (version is migration-coupled).
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1428,6 +1567,14 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0010" ]; then
   test_migration_0010
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0011" ]; then
+  test_migration_0011
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "gate" ]; then
+  test_change_gate
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then
