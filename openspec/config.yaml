@@ -1,0 +1,29 @@
+schema: spec-driven
+
+context: |
+  This repo is the opencode host scaffolder for the AgenticApps OpenSpec +
+  Superpowers workflow (spec v1.0.0; agenticapps-workflow-core spec/16-19).
+  It ships prose/skills/scripts, not application code. Conventions: bash 3.2
+  compatible scripts; conventional commits; feature branches + PRs to main
+  (never commit to main); the §18 change-gate (bin/openspec-change-gate.sh)
+  gates code edits under an active change; the migration chain + snapshot
+  parity guard (migrations/) is the source of truth for installed artifacts.
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+# Add your tech stack, conventions, style guides, domain knowledge, etc.
+# Example:
+#   context: |
+#     Tech stack: TypeScript, React, Node.js
+#     We use conventional commits
+#     Domain: e-commerce platform
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
