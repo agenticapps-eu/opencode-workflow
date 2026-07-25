@@ -36,7 +36,7 @@ installer to implement the same arbitration.
   relative to, the incoming `# gate-version:`
 - **THEN** the installer replaces it with the incoming copy
 
-#### Scenario: Malformed incoming marker is parsed by the leading-numeric-run rule and never crashes
+#### Scenario: Malformed incoming marker does not crash the installer
 
 - **WHEN** the incoming gate carries a malformed `# gate-version:` marker
 - **THEN** the installer parses it by the same two-stage rule the reviewer-cli
