@@ -33,6 +33,12 @@ jobs:
         # trusting its verdict. The harness is vendored from core alongside the
         # gate; keep them in sync, since a stale harness certifies a stale gate.
         run: bash tools/change-gate-conformance.sh bin/openspec-change-gate.sh
+      - name: Prove the reviewer-cli is conformant
+        # The §18 review *producer* wrapper deserves the same bar as the gate it
+        # feeds (core#41: a silently-vendored copy lost a vendor arm and reported
+        # nothing). Score the vendored wrapper against its vendored harness; a
+        # stale harness certifies a stale wrapper.
+        run: bash tools/reviewer-cli-conformance.sh bin/reviewer-cli.sh
       - name: Run the change gate
         run: bash bin/openspec-change-gate.sh --ci
         # exit 0 = all active changes validate and carry >=2 reviewers; exit 1 = block the PR.
