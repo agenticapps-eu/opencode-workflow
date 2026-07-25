@@ -1,0 +1,38 @@
+# .github/workflows/openspec-gate.yml
+#
+# The agent-agnostic enforcement floor in CI (spec §18): every active change must
+# validate and carry >= 2 independent reviewers before code merges. This is the
+# one surface no local configuration can bypass — a developer can pass
+# --no-verify to the pre-commit hook, and a PreToolUse hook cannot gate the
+# session that installed it.
+#
+# Adapted from the core reference workflow
+# (agenticapps-workflow-core reference-implementations/openspec-change-gate/hooks/).
+# Host-local adaptations: action versions pinned to @v4 (this repo's convention),
+# and OPENSPEC_GATE_SELF=opencode in the job env so this host's own reviews are
+# excluded from the reviewer threshold.
+name: OpenSpec change gate
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    env:
+      OPENSPEC_GATE_SELF: opencode
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Install OpenSpec
+        run: npm i -g @fission-ai/openspec
+      - name: Prove the gate itself is conformant
+        # A gate that has drifted can pass every repo it guards while enforcing
+        # nothing (issue #32: five copies, none conformant). Score it before
+        # trusting its verdict. The harness is vendored from core alongside the
+        # gate; keep them in sync, since a stale harness certifies a stale gate.
+        run: bash tools/change-gate-conformance.sh bin/openspec-change-gate.sh
+      - name: Run the change gate
+        run: bash bin/openspec-change-gate.sh --ci
+        # exit 0 = all active changes validate and carry >=2 reviewers; exit 1 = block the PR.

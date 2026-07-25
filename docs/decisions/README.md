@@ -25,3 +25,4 @@ template shape — risk owner, re-audit date, compensating controls.
 | [0008](0008-knowledge-capture.md) | Knowledge capture ritual tail — spec §15 on the opencode host | Accepted |
 | [0009](0009-region-aware-spec-11-placement.md) | §11 is anchored region-aware: first `## ` or `gitnexus:start`, whichever comes first | Superseded by [0010] |
 | [0010](0010-openspec-superpowers-adoption.md) | Adopt the OpenSpec + Superpowers front end (spec v1.0.0), retiring the GSD planning engine | Accepted |
+| [0011](0011-revendor-change-gate.md) | Re-vendor the §18 change-gate from core's reference implementation (16/28 → 28/28) | Accepted |

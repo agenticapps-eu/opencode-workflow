@@ -1,22 +1,32 @@
 #!/usr/bin/env bash
-# pre-commit — agent-agnostic floor for the §18 OpenSpec change-gate.
+# pre-commit — agent-agnostic floor for the §18 OpenSpec change-gate (opencode host).
 #
-# The per-agent hooks (Claude PreToolUse, opencode plugin, Codex hooks.json)
-# give fast feedback but each is loaded at session start and cannot gate the
-# session that installed it. This git pre-commit hook is the floor: it catches
-# code committed by ANY agent or a human, including the installing session.
+# Adapted from the core reference implementation's `pre-commit` wrapper
+# (agenticapps-workflow-core reference-implementations/openspec-change-gate/).
+# Host-local, NOT byte-identical to core: it adds this repo's gate-path fallback
+# and exports OPENSPEC_GATE_SELF=opencode so this host's own reviews do not count
+# toward the reviewer threshold (§18). All policy — staged-awareness, the
+# openspec/ artifact exemption, validate + REVIEWS.md >=2, the escape hatch — lives
+# in the vendored gate's `--pre-commit` mode, not here.
 #
-# It reuses the SAME enforcement script (openspec-change-gate.sh, §18): for each
-# staged file that is NOT an OpenSpec artifact, it pipes a synthesized payload
-# to the gate; if the gate blocks (exit 2), the commit is refused.
+# Why the floor exists: the per-agent hooks (Claude PreToolUse, the opencode
+# plugin, Codex hooks.json) are each loaded at session start and cannot gate the
+# session that installed them; none exists for a human with an editor. This git
+# hook catches code committed by ANY agent or a human, including the installing
+# session.
 #
 # Bypass (documented, same posture as the per-agent escape hatch):
 #   GSD_SKIP_REVIEWS=1 git commit ...      # deliberate, logged override
 #   git commit --no-verify ...             # git's own bypass
 #
-# Resolution order for the gate script: $OPENSPEC_CHANGE_GATE,
-# ~/.agenticapps/bin/openspec-change-gate.sh, then repo-local bin/.
+# Resolution order for the gate script. The shared install path is preferred so a
+# single upgrade reaches every repo; issue #32/#15 recorded its failure mode
+# (whichever host's installer ran last owns that path), so pin OPENSPEC_CHANGE_GATE
+# to a known-good copy to opt out of that race, and score whatever you land on:
+#   tools/change-gate-conformance.sh "$OPENSPEC_CHANGE_GATE"
 set -u
+
+export OPENSPEC_GATE_SELF="${OPENSPEC_GATE_SELF:-opencode}"
 
 GATE=""
 for c in "${OPENSPEC_CHANGE_GATE:-}" \
@@ -24,29 +34,13 @@ for c in "${OPENSPEC_CHANGE_GATE:-}" \
          "$(git rev-parse --show-toplevel 2>/dev/null)/bin/openspec-change-gate.sh"; do
   [ -n "$c" ] && [ -x "$c" ] && { GATE="$c"; break; }
 done
-# No gate installed → nothing to enforce (fail open; the CI check still runs).
-[ -n "$GATE" ] || exit 0
 
-# No openspec/ → repo hasn't adopted the spec slot yet → nothing to gate.
-[ -d "openspec/changes" ] || exit 0
-
-blocked=0
-# Staged, added/copied/modified files only.
-while IFS= read -r f; do
-  [ -n "$f" ] || continue
-  case "$f" in openspec/*) continue ;; esac   # authoring the change is exempt
-  payload="{\"tool\":\"edit\",\"tool_input\":{\"file_path\":\"$f\"}}"
-  if ! printf '%s' "$payload" | "$GATE"; then
-    blocked=1
-    break   # one block is enough; the gate already explained why on stderr
-  fi
-done < <(git diff --cached --name-only --diff-filter=ACM)
-
-if [ "$blocked" -ne 0 ]; then
-  echo "pre-commit: blocked by the OpenSpec change-gate (§18)." >&2
-  echo "  The active change must pass 'openspec validate --all' AND carry" >&2
-  echo "  REVIEWS.md with >=2 '## Reviewer:' sections before code is committed." >&2
-  echo "  Override (logged): GSD_SKIP_REVIEWS=1 git commit ...   or   git commit --no-verify" >&2
-  exit 1
+# Fail OPEN on a missing gate, consistent with §18's fail-open-on-error posture:
+# a commit hook that hard-fails because tooling is absent trains people to pass
+# --no-verify, which disables the floor permanently. The CI check still runs.
+if [ -z "$GATE" ]; then
+  printf 'openspec-gate: WARNING — gate not found; commit not gated.\n' >&2
+  exit 0
 fi
-exit 0
+
+exec "$GATE" --pre-commit

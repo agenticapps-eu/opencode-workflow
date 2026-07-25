@@ -1,12 +1,5 @@
-# opencode-workflow-scaffold
+## MODIFIED Requirements
 
-## Purpose
-
-The capability this repository ships: installing the AgenticApps OpenSpec +
-Superpowers (spec v1.0.0) workflow onto the opencode host, and keeping an
-installed project current. This is the scaffolder's own product surface,
-reconstructed as its first seed capability (§19).
-## Requirements
 ### Requirement: Change-gate enforces review before code
 
 In every mode (session hook, `--pre-commit`, `--ci`), the change-gate SHALL block
@@ -52,16 +45,7 @@ against, the configured value) are excluded from the count.
 - **AND WHEN** `GSD_SKIP_REVIEWS=1` is set but the active change does not validate
 - **THEN** the change-gate exits non-zero (block)
 
-### Requirement: Bind OpenSpec upstream per host
-
-The scaffolder SHALL generate the OpenSpec slot and `/opsx:*` commands with the
-upstream CLI (`openspec init --tools opencode --profile core`) rather than
-vendoring a hand-maintained copy.
-
-#### Scenario: Fresh install generates the slot
-
-- **WHEN** `install.sh` runs with the openspec CLI available
-- **THEN** an `openspec/` slot and the `/opsx:*` commands are generated
+## ADDED Requirements
 
 ### Requirement: OpenSpec-artifact exemption is anchored to the repository root
 
@@ -164,4 +148,3 @@ installer to implement the same arbitration.
 
 - **WHEN** the incoming gate carries a malformed `# gate-version:` marker
 - **THEN** the installer treats it as `0.0.0` and completes without error
-

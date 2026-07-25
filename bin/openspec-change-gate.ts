@@ -71,6 +71,12 @@ export const OpenspecChangeGate = async ({ directory, worktree }: any = {}) => (
         input: payload,
         encoding: "utf8",
         timeout: 60_000,
+        // OPENSPEC_GATE_SELF names this host so its own reviews are excluded from
+        // the §18 reviewer threshold. Injected here, in the host-local wiring —
+        // the vendored gate reads the var but is never edited to carry the value.
+        // `|| "opencode"` (not `??`) so an explicitly-empty value also defaults,
+        // matching the pre-commit wrapper's `${OPENSPEC_GATE_SELF:-opencode}`.
+        env: { ...process.env, OPENSPEC_GATE_SELF: process.env.OPENSPEC_GATE_SELF || "opencode" },
       });
       // If the gate itself errored (couldn't run), fail open — do not brick edits.
       if (res.error) return;
