@@ -142,7 +142,7 @@ wait
 
 The wrapper already handles the hardening the skill must not re-implement:
 each reviewer CLI is fed `</dev/null` on stdin and bounded by a hard
-`timeout` (`REVIEWER_TIMEOUT`, default 180s). This exists because the
+`timeout` (`REVIEWER_TIMEOUT`, default 300s). This exists because the
 pilot found `codex exec "<prompt>"` reads stdin and hangs without
 `</dev/null` (PILOT-REPORT friction #3, a 4-minute stall on first
 attempt). The skill just calls the wrapper.
@@ -256,7 +256,7 @@ produced, never as a shortcut around a REQUEST-CHANGES finding.
 - The gate's default is `>= 2` reviewers; `OPENSPEC_GATE_MIN_REVIEWERS`
   can raise it. If a project raised it, produce that many DISTINCT
   vendors.
-- `REVIEWER_TIMEOUT` (default 180s) bounds each reviewer. A vendor that
+- `REVIEWER_TIMEOUT` (default 300s) bounds each reviewer. A vendor that
   needs longer can be given a larger cap; a vendor that times out
   (`exit 124`) is treated as unavailable, not as a pass.
 

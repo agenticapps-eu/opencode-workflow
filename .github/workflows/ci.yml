@@ -31,7 +31,7 @@ jobs:
           set -e
           for s in install.sh migrations/check-snapshot-parity.sh migrations/run-tests.sh \
                    bin/openspec-change-gate.sh bin/reviewer-cli.sh bin/git-hooks/pre-commit \
-                   tools/change-gate-conformance.sh; do
+                   tools/change-gate-conformance.sh tools/reviewer-cli-conformance.sh; do
             bash -n "$s" && echo "ok: $s"
           done
 
