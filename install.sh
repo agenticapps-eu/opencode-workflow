@@ -267,6 +267,39 @@ for arg in "$@"; do [ "$arg" = "--skip-upstream" ] && SKIP_UPSTREAM=1; done
 AA_BIN="$HOME/.agenticapps/bin"
 OPENCODE_PLUGIN_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/plugin"
 
+# >>> gate-version-arbitration >>>
+# Every host writes to the SHARED ~/.agenticapps/bin/openspec-change-gate.sh, so
+# without arbitration it is last-writer-wins: a host vendoring an older gate would
+# silently republish it over a newer one (issue #15 / core#32). This installer
+# reads the `# gate-version:` marker and refuses to downgrade. It makes THIS
+# installer non-downgrading; machine-wide monotonicity needs every host to do the
+# same (core#34). Marker-delimited + self-contained so the test suite can source it.
+_gate_version_of() {  # <file> -> dotted version on stdout; unmarked/unreadable/malformed -> 0.0.0
+  local f="$1" v=""
+  [ -r "$f" ] && v="$(sed -n 's/^# gate-version:[[:space:]]*\([0-9][0-9.]*\).*/\1/p' "$f" | head -1)"
+  case "$v" in ''|*[!0-9.]*) v="0.0.0" ;; esac
+  printf '%s' "$v"
+}
+_gate_ver_ge() {  # returns 0 (true) if $1 >= $2, comparing up to 3 numeric dotted fields
+  local a b; local -a A B; local IFS=.
+  # shellcheck disable=SC2206
+  A=($1); B=($2)
+  local i ai bi
+  for i in 0 1 2; do
+    ai=${A[i]:-0}; bi=${B[i]:-0}
+    ai=$((10#${ai%%[!0-9]*})); bi=$((10#${bi%%[!0-9]*}))
+    [ "$ai" -gt "$bi" ] && return 0
+    [ "$ai" -lt "$bi" ] && return 1
+  done
+  return 0  # equal -> ge
+}
+_gate_should_install() {  # <incoming_file> <installed_file>: 0 (true) => replace, 1 => keep
+  [ -e "$2" ] || return 0                                   # nothing installed -> install
+  _gate_ver_ge "$(_gate_version_of "$2")" "$(_gate_version_of "$1")" && return 1  # installed >= incoming -> keep
+  return 0                                                   # installed < incoming -> replace
+}
+# <<< gate-version-arbitration <<<
+
 echo ""
 echo "${YELLOW}Installing the OpenSpec change-gate (spec §18)${RESET}"
 echo "  ${GREEN}GATE${RESET}   $AA_BIN/openspec-change-gate.sh   (host-agnostic enforcement surface)"
@@ -275,7 +308,13 @@ echo "  ${GREEN}HOOK${RESET}   $OPENCODE_PLUGIN_DIR/openspec-change-gate.ts  (op
 echo "  ${GREEN}HOOK${RESET}   .git/hooks/pre-commit             (agent-agnostic floor)"
 if [ "$DRY_RUN" -eq 0 ]; then
   mkdir -p "$AA_BIN" "$OPENCODE_PLUGIN_DIR" "$HOME/.agenticapps/git-hooks"
-  install -m 0755 "$SCAFFOLDER_ROOT/bin/openspec-change-gate.sh" "$AA_BIN/openspec-change-gate.sh"
+  # Gate: install only if this is not a downgrade of the shared copy (issue #15).
+  if _gate_should_install "$SCAFFOLDER_ROOT/bin/openspec-change-gate.sh" "$AA_BIN/openspec-change-gate.sh"; then
+    install -m 0755 "$SCAFFOLDER_ROOT/bin/openspec-change-gate.sh" "$AA_BIN/openspec-change-gate.sh"
+    echo "  ${GREEN}OK${RESET}     gate installed (version $(_gate_version_of "$AA_BIN/openspec-change-gate.sh"))"
+  else
+    echo "  ${GREEN}KEEP${RESET}   gate at $AA_BIN is version $(_gate_version_of "$AA_BIN/openspec-change-gate.sh") >= incoming $(_gate_version_of "$SCAFFOLDER_ROOT/bin/openspec-change-gate.sh") — refused downgrade"
+  fi
   install -m 0755 "$SCAFFOLDER_ROOT/bin/reviewer-cli.sh"         "$AA_BIN/reviewer-cli.sh"
   install -m 0644 "$SCAFFOLDER_ROOT/bin/openspec-change-gate.ts" "$OPENCODE_PLUGIN_DIR/openspec-change-gate.ts"
   # Stage the pre-commit at a stable global path so the per-project setup skill
