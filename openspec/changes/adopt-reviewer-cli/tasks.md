@@ -32,6 +32,6 @@
 ## 7. Lifecycle close-out
 
 - [x] 7.1 ADR-0012 recording the adoption and the scoped (this-installer) downgrade guarantee; note it supersedes ADR-0011's classification of `bin/reviewer-cli.sh` as host-local wiring; add it to `docs/decisions/README.md` index
-- [ ] 7.2 Independent **Stage-3** code review (`superpowers:requesting-code-review`) against the implementation diff — distinct from the Stage-2 pre-code change review already produced in REVIEWS.md
+- [x] 7.2 Independent **Stage-3** code review (`superpowers:requesting-code-review`) against the implementation diff — distinct from the Stage-2 pre-code change review already produced in REVIEWS.md
 - [x] 7.3 `/cso` on the change → SECURITY.md. The wrapper spawns external CLIs with a caller-supplied prompt AND adds two executable dispatch arms (`claude`, `opencode`) at a fleet-shared path; the audit must **assess** the trust-boundary delta from the 2-arm copy, not assume it is unchanged
-- [ ] 7.4 Archive the change; open the adoption PR referencing core #41/#42 and the harness score
+- [x] 7.4 Archive the change; open the adoption PR referencing core #41/#42 and the harness score
