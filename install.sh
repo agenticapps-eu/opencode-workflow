@@ -300,6 +300,30 @@ _gate_should_install() {  # <incoming_file> <installed_file>: 0 (true) => replac
 }
 # <<< gate-version-arbitration <<<
 
+# >>> reviewer-cli-version-arbitration >>>
+# The §18 review-producer wrapper reviewer-cli.sh is written to the SAME shared
+# ~/.agenticapps/bin/reviewer-cli.sh by every host installer, so — exactly like
+# the gate above — an unarbitrated write is last-writer-wins: a host vendoring an
+# older wrapper silently republishes it over a newer one and drops vendor arms
+# for every agent on the machine (core#41: a 3-arm copy blind-installed over the
+# 4-arm one; the next review asking for `opencode` got `unknown vendor`). This
+# installer reads the `# reviewer-cli-version:` marker and refuses to downgrade,
+# reusing the gate region's _gate_ver_ge comparator (the compare is
+# marker-agnostic; only the extraction differs). Marker-delimited + self-contained
+# so the test suite can source it alongside the gate region.
+_reviewer_cli_version_of() {  # <file> -> dotted version on stdout; unmarked/unreadable/malformed -> 0.0.0
+  local f="$1" v=""
+  [ -r "$f" ] && v="$(sed -n 's/^# reviewer-cli-version:[[:space:]]*\([0-9][0-9.]*\).*/\1/p' "$f" | head -1)"
+  case "$v" in ''|*[!0-9.]*) v="0.0.0" ;; esac
+  printf '%s' "$v"
+}
+_reviewer_cli_should_install() {  # <incoming_file> <installed_file>: 0 (true) => replace, 1 => keep
+  [ -e "$2" ] || return 0                                   # nothing installed -> install
+  _gate_ver_ge "$(_reviewer_cli_version_of "$2")" "$(_reviewer_cli_version_of "$1")" && return 1  # installed >= incoming -> keep
+  return 0                                                   # installed < incoming -> replace
+}
+# <<< reviewer-cli-version-arbitration <<<
+
 echo ""
 echo "${YELLOW}Installing the OpenSpec change-gate (spec §18)${RESET}"
 echo "  ${GREEN}GATE${RESET}   $AA_BIN/openspec-change-gate.sh   (host-agnostic enforcement surface)"
@@ -315,7 +339,14 @@ if [ "$DRY_RUN" -eq 0 ]; then
   else
     echo "  ${GREEN}KEEP${RESET}   gate at $AA_BIN is version $(_gate_version_of "$AA_BIN/openspec-change-gate.sh") >= incoming $(_gate_version_of "$SCAFFOLDER_ROOT/bin/openspec-change-gate.sh") — refused downgrade"
   fi
-  install -m 0755 "$SCAFFOLDER_ROOT/bin/reviewer-cli.sh"         "$AA_BIN/reviewer-cli.sh"
+  # Reviewer-CLI wrapper: same downgrade-refusal as the gate (core#41). Every
+  # host writes this shared path; refuse to replace a newer copy with an older one.
+  if _reviewer_cli_should_install "$SCAFFOLDER_ROOT/bin/reviewer-cli.sh" "$AA_BIN/reviewer-cli.sh"; then
+    install -m 0755 "$SCAFFOLDER_ROOT/bin/reviewer-cli.sh" "$AA_BIN/reviewer-cli.sh"
+    echo "  ${GREEN}OK${RESET}     reviewer-cli installed (version $(_reviewer_cli_version_of "$AA_BIN/reviewer-cli.sh"))"
+  else
+    echo "  ${GREEN}KEEP${RESET}   reviewer-cli at $AA_BIN is version $(_reviewer_cli_version_of "$AA_BIN/reviewer-cli.sh") >= incoming $(_reviewer_cli_version_of "$SCAFFOLDER_ROOT/bin/reviewer-cli.sh") — refused downgrade"
+  fi
   install -m 0644 "$SCAFFOLDER_ROOT/bin/openspec-change-gate.ts" "$OPENCODE_PLUGIN_DIR/openspec-change-gate.ts"
   # Stage the pre-commit at a stable global path so the per-project setup skill
   # can install it into each target repo's .git/hooks.

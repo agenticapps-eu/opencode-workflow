@@ -1522,6 +1522,58 @@ test_repo_layout() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# reviewer-cli version arbitration (install.sh) — core #41
+# Sources the marker-delimited arbitration regions from install.sh in isolation
+# (no installer side effects) and asserts the downgrade-refusal truth table:
+# absent -> install; installed >= incoming -> keep; installed < incoming ->
+# replace; unmarked/malformed installed -> 0.0.0 -> replace; equal -> keep; a
+# partial-prefix marker (1.x) compares as 1.0.0; a malformed incoming marker
+# never crashes. The reviewer-cli region reuses the gate region's _gate_ver_ge
+# comparator (design D3), so both regions are sourced.
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_reviewer_cli_arbitration() {
+  echo ""
+  echo "${YELLOW}=== reviewer-cli version arbitration (install.sh, core #41) ===${RESET}"
+
+  local src; src="$(mktemp)"
+  awk '/# >>> gate-version-arbitration >>>/,/# <<< gate-version-arbitration <<</' install.sh  > "$src"
+  awk '/# >>> reviewer-cli-version-arbitration >>>/,/# <<< reviewer-cli-version-arbitration <<</' install.sh >> "$src"
+  # shellcheck source=/dev/null
+  . "$src" 2>/dev/null || true
+  rm -f "$src"
+
+  if ! declare -F _reviewer_cli_should_install >/dev/null 2>&1; then
+    echo "  ${RED}FAIL${RESET} install.sh has no reviewer-cli-version-arbitration region (functions undefined)"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  local d; d="$(mktemp -d)"
+  mk()     { printf '#!/usr/bin/env bash\n# reviewer-cli-version: %s\n' "$1" > "$2"; }
+  mkbare() { printf '#!/usr/bin/env bash\n# no marker here\n' > "$1"; }
+
+  # _reviewer_cli_should_install <incoming> <installed>: 0 => replace/install, 1 => keep
+  assert_ri() {  # <desc> <expected: install|keep> <incoming_file> <installed_file>
+    local desc="$1" want="$2" inc="$3" ins="$4" got
+    if _reviewer_cli_should_install "$inc" "$ins"; then got="install"; else got="keep"; fi
+    if [ "$got" = "$want" ]; then echo "  ${GREEN}PASS${RESET} $desc ($got)"; PASS=$((PASS+1))
+    else echo "  ${RED}FAIL${RESET} $desc — expected $want, got $got"; FAIL=$((FAIL+1)); fi
+  }
+
+  mk 1.0.0 "$d/incoming"
+  assert_ri "absent destination -> install"                    install "$d/incoming" "$d/nonexistent"
+  mk 2.0.0 "$d/hi";      assert_ri "installed 2.0.0 > incoming 1.0.0 -> keep"    keep    "$d/incoming" "$d/hi"
+  mk 0.9.0 "$d/lo";      assert_ri "installed 0.9.0 < incoming 1.0.0 -> install" install "$d/incoming" "$d/lo"
+  mkbare   "$d/bare";    assert_ri "installed unmarked -> 0.0.0 -> install"      install "$d/incoming" "$d/bare"
+  mk abc   "$d/mal";     assert_ri "installed 'abc' -> 0.0.0 -> install"         install "$d/incoming" "$d/mal"
+  mk 1.0.0 "$d/eq";      assert_ri "installed 1.0.0 == incoming 1.0.0 -> keep"   keep    "$d/incoming" "$d/eq"
+  mk 1.x   "$d/partial"; assert_ri "installed '1.x' (compares as 1.0.0) -> keep" keep    "$d/incoming" "$d/partial"
+  mk abc   "$d/badinc";  assert_ri "malformed incoming 'abc' -> 0.0.0, never crashes" keep "$d/badinc" "$d/eq"
+
+  rm -rf "$d"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Dispatcher
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1575,6 +1627,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "gate" ]; then
   test_change_gate
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "arbitration" ]; then
+  test_reviewer_cli_arbitration
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then
