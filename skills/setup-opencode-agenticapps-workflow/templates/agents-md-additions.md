@@ -86,8 +86,8 @@ session-level discipline the model brings to every diff.
 This repo uses the AgenticApps spec-first workflow on the opencode host.
 On any code-touching task the `agentic-apps-workflow` trigger skill
 activates, emits the canonical commitment ritual before any tool call,
-and carries the gate bindings, task-size routing, plan-review, and
-knowledge-capture procedures — read them there, not here.
+and carries the gate bindings, task-size routing and plan-review
+procedures — read them there, not here.
 Project-specific bindings live in `.planning/config.json`; gates that do
 not fire on this project are documented in `docs/ENFORCEMENT-PLAN.md`.
 Do not bypass a gate — accept-via-ADR is the override path. Spec:

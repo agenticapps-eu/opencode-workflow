@@ -64,26 +64,26 @@ echo "  snapshot: $SNAP"
 extract_block > "$tmp"
 compare "$tmp" "$SNAP/agents-block.md" "AGENTS.md workflow block"
 
-# 2) .planning/config.json end-state — compared MODULO the repo-specific,
-# host-neutral `knowledge_capture` block. That block's `note` path carries the
-# resolved repo name (spec §15.2 / ADR-0017), so it is deliberately NOT baked
-# into the generic snapshot: setup seeds it (resolving <repo-name>) and migration
-# 0005 merges it. Everything else ($schema, implements_spec, host, hooks) MUST
-# match. Compared jq-normalized (jq -S) so a merge's reformatting/key-order does
-# not read as drift.
+# 2) .planning/config.json end-state — compared IN FULL. It was previously
+# compared modulo the repo-specific `knowledge_capture` block, whose `note`
+# carried the resolved repo name and so could not be baked into the generic
+# snapshot. Spec §15 was retired at core spec 1.2.0 and that block is gone, so
+# nothing in this file is repo-specific any more and the exclusion is dropped.
+# Compared jq-normalized (jq -S) so a merge's reformatting/key-order does not
+# read as drift.
 CFG_SRC="$ROOT/.planning/config.json"
 CFG_SNAP="$SNAP/planning-config.json"
 if [ "$MODE" = "rebuild" ]; then
-  jq 'del(.knowledge_capture)' "$CFG_SRC" > "$CFG_SNAP.tmp" && mv "$CFG_SNAP.tmp" "$CFG_SNAP"
-  note "rebuilt: .planning/config.json (sans knowledge_capture)"
+  cp "$CFG_SRC" "$CFG_SNAP"
+  note "rebuilt: .planning/config.json"
 else
   csrc="$(mktemp)"; csnap="$(mktemp)"
-  jq -S 'del(.knowledge_capture)' "$CFG_SRC"  > "$csrc"  2>/dev/null
-  jq -S 'del(.knowledge_capture)' "$CFG_SNAP" > "$csnap" 2>/dev/null
+  jq -S . "$CFG_SRC"  > "$csrc"  2>/dev/null
+  jq -S . "$CFG_SNAP" > "$csnap" 2>/dev/null
   if diff -q "$csrc" "$csnap" >/dev/null 2>&1; then
-    note "ok: .planning/config.json (modulo knowledge_capture)"
+    note "ok: .planning/config.json"
   else
-    note "DRIFT: .planning/config.json differs (excluding knowledge_capture)"
+    note "DRIFT: .planning/config.json differs"
     fail=1
   fi
   rm -f "$csrc" "$csnap"

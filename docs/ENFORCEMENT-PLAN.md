@@ -49,8 +49,8 @@ build-out (`docs/dogfood-2026-05-10.md`).
      instruction-surface economy SHOULD** — the always-loaded `AGENTS.md`
      carries the §11 canonical block plus two short pointers (the trigger
      skill, and the session-handoff protocol). The §02 gate table, task-size
-     routing, the session-handoff procedure and the §15 knowledge-capture
-     ritual tail all live in the lazily-loaded trigger skill, which loads on
+     routing and the session-handoff procedure all live in the lazily-loaded
+     trigger skill, which loads on
      exactly the code-touching turns where they bind. Gate *enforcement* is
      unaffected — `.planning/config.json` and the CI guards are unchanged;
      only prose moved. Migration `0010`; core ADR-0020.
