@@ -9,6 +9,38 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
+### Removed
+
+- **Knowledge capture (spec §15) — every live surface on this host.** Core
+  removed §15 at spec 1.2.0 and superseded ADR-0017; this host follows.
+  Gone: the `## Knowledge Capture — Ritual Tail` section in
+  `skills/agentic-apps-workflow/SKILL.md` (78 lines), setup Step 8b's seeding
+  block, the `knowledge_capture` block in `.planning/config.json`, and the
+  `config-knowledge-capture.json` / `obsidian-learnings-note.md` templates.
+  AGENTS.md, the snapshot `agents-block.md`, `agents-md-additions.md`,
+  `docs/ENFORCEMENT-PLAN.md` and the standards checklist no longer reference
+  it; ADR-0008 carries a superseded banner.
+
+  **No migration.** A migration would install machinery to delete machinery;
+  installed projects are edited directly.
+
+- **The parity guard's `knowledge_capture` exclusion.** `.planning/config.json`
+  was compared against the snapshot *modulo* that block, because its `note`
+  carried a resolved repo name that could not be baked into a generic snapshot.
+  With the block gone nothing in the file is repo-specific, so
+  `check-snapshot-parity.sh` now compares it **in full** — a strictly stronger
+  check. Same for the snapshot-vs-template regression test in `run-tests.sh`.
+
+- **Migration `0005`'s test body**, retired *with* the feature: it replayed the
+  config merge and AGENTS.md insert against the live shipped templates, so with
+  those deleted it could not be kept green. It is now a retirement check (doc
+  retained as history per §08; no `knowledge_capture` payload may reappear
+  under `skills/` or the live config). The migration doc — and every other
+  reference inside `migrations/` — is **untouched**.
+
+  Suite: PASS 126, FAIL 0 (was 139/0; the 13-row delta is the retired fixture
+  coverage). Snapshot parity: PASS.
+
 ## [0.6.0] — 2026-07-19
 
 ### Changed

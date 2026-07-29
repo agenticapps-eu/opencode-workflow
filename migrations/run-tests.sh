@@ -376,159 +376,39 @@ test_migration_0004() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Migration 0005 — Knowledge capture (spec §15)
-# Testable non-interactively: the config merge resolves <repo-name> and
-# preserves a pre-existing (codex) key; the AGENTS.md section insert is present
-# and idempotent; the version bump round-trips.
+# Migration 0005 — Knowledge capture (spec §15) — RETIRED 2026-07-28.
+#
+# Core removed §15 at spec 1.2.0 (core ADR-0025; host ADR-0008 superseded), so
+# the feature this migration installs no longer exists. The old body replayed
+# 0005's config merge and AGENTS.md section insert against the LIVE shipped
+# templates — config-knowledge-capture.json, obsidian-learnings-note.md and the
+# ritual-tail section of agents-md-additions.md — all now deleted, so it could
+# not be kept green and was retired WITH the feature.
+#
+# The migration doc is retained as history (§08: history is superseded, never
+# deleted).
 # ─────────────────────────────────────────────────────────────────────────────
 
 test_migration_0005() {
   echo ""
-  echo "${YELLOW}=== Migration 0005 — Knowledge capture (spec §15) ===${RESET}"
+  echo "${YELLOW}=== Migration 0005 — Knowledge capture (spec §15) (RETIRED) ===${RESET}"
 
-  if ! command -v jq >/dev/null 2>&1; then
-    echo "  ${YELLOW}SKIP${RESET} jq not available — knowledge-capture test not run"
-    SKIP=$((SKIP+1)); return
-  fi
-
-  local kctpl="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/templates/config-knowledge-capture.json"
-  local notetpl="$REPO_ROOT/skills/setup-opencode-agenticapps-workflow/templates/obsidian-learnings-note.md"
-  # Migration 0010 (spec 0.10.0 §12 instruction-surface economy) moved the §15
-  # ritual tail out of the eager AGENTS.md template into the lazily-loaded
-  # trigger skill. 0005's contract — the §15 section is installable, carries the
-  # (opencode) host tag, and lands inside a marker block — is unchanged; only
-  # the surface it ships on moved, so it is sourced from there now.
-  local agentstpl="$REPO_ROOT/skills/agentic-apps-workflow/SKILL.md"
-
-  # Templates ship.
-  if [ -f "$kctpl" ] && [ -f "$notetpl" ] && [ -f "$agentstpl" ]; then
-    echo "  ${GREEN}PASS${RESET} knowledge-capture templates ship (config + note + agents-md)"
+  if [ -f "$REPO_ROOT/migrations/0005-knowledge-capture.md" ]; then
+    echo "  ${GREEN}PASS${RESET} migration doc retained as history"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} knowledge-capture templates missing"
-    FAIL=$((FAIL+1)); return
-  fi
-
-  # Config template is host-neutral (enabled + note only; no host key).
-  if jq -e '.knowledge_capture | (has("enabled") and has("note")) and ((keys | length) == 2)' "$kctpl" >/dev/null 2>&1; then
-    echo "  ${GREEN}PASS${RESET} config template is host-neutral (enabled + note only)"
-    PASS=$((PASS+1))
-  else
-    echo "  ${RED}FAIL${RESET} config template is not host-neutral"
+    echo "  ${RED}FAIL${RESET} migration 0005 doc missing — history must be superseded, not deleted (§08)"
     FAIL=$((FAIL+1))
   fi
 
-  # Note skeleton declares hosts: [opencode].
-  if grep -qE '^hosts: \[opencode\]$' "$notetpl"; then
-    echo "  ${GREEN}PASS${RESET} note skeleton declares hosts: [opencode]"
+  local stray
+  stray="$(grep -rl 'knowledge_capture' "$REPO_ROOT/skills" "$REPO_ROOT/.planning/config.json" 2>/dev/null | head -5)"
+  if [ -z "$stray" ]; then
+    echo "  ${GREEN}PASS${RESET} no knowledge_capture payload ships from skills/ or the live config"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} note skeleton missing hosts: [opencode]"
-    FAIL=$((FAIL+1))
-  fi
-
-  local tmp; tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' RETURN
-
-  # Step 1 — config merge on a codex co-install (host-namespaced-looking hooks
-  # present). The merge must add knowledge_capture, resolve <repo-name>, and
-  # preserve the pre-existing key.
-  cat > "$tmp/config.json" <<'JSON'
-{ "host": "opencode", "hooks": { "per_task": { "tdd": { "skill": "superpowers:test-driven-development" } } } }
-JSON
-
-  assert_check "idempotency: fresh config needs knowledge_capture" \
-    "jq -e '.knowledge_capture' config.json >/dev/null" "$tmp" "not-applied"
-
-  ( cd "$tmp" \
-    && KC="$(jq -c --arg name "widget-repo" '.knowledge_capture.note |= gsub("<repo-name>"; $name) | .knowledge_capture' "$kctpl")" \
-    && jq --argjson kc "$KC" '. + {knowledge_capture: $kc}' config.json > config.tmp && mv config.tmp config.json )
-
-  assert_check "after apply: knowledge_capture present" \
-    "jq -e '.knowledge_capture.enabled == true' config.json >/dev/null" "$tmp" "applied"
-
-  if ( cd "$tmp" && jq -e '.knowledge_capture.note | endswith("widget-repo.md") and (contains("<repo-name>") | not)' config.json >/dev/null ); then
-    echo "  ${GREEN}PASS${RESET} <repo-name> resolved in note path (no placeholder remains)"
-    PASS=$((PASS+1))
-  else
-    echo "  ${RED}FAIL${RESET} <repo-name> not resolved in note path"
-    FAIL=$((FAIL+1))
-  fi
-
-  if ( cd "$tmp" && jq -e '.hooks.per_task.tdd.skill == "superpowers:test-driven-development" and .host == "opencode"' config.json >/dev/null ); then
-    echo "  ${GREEN}PASS${RESET} pre-existing config keys preserved through merge"
-    PASS=$((PASS+1))
-  else
-    echo "  ${RED}FAIL${RESET} pre-existing config keys lost in merge"
-    FAIL=$((FAIL+1))
-  fi
-
-  # Idempotent re-apply: block already present → merge is a no-op on the note.
-  if ( cd "$tmp" && jq -e '.knowledge_capture' config.json >/dev/null ); then
-    echo "  ${GREEN}PASS${RESET} idempotency guard positive on second apply (block preserved verbatim)"
-    PASS=$((PASS+1))
-  else
-    echo "  ${RED}FAIL${RESET} idempotency guard failed"
-    FAIL=$((FAIL+1))
-  fi
-
-  # Rollback removes only the added block.
-  ( cd "$tmp" && jq 'del(.knowledge_capture)' config.json > config.tmp && mv config.tmp config.json )
-  assert_check "after rollback: knowledge_capture removed, base intact" \
-    "jq -e '.knowledge_capture' config.json >/dev/null" "$tmp" "not-applied"
-
-  # Step 2 — AGENTS.md section insert. Synthetic AGENTS.md with the marker pair
-  # but no section; apply the migration's extract+insert; assert section present
-  # and a second apply is a no-op (idempotency grep).
-  printf '# AGENTS\n\n<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->\n\n## Something\n\nbody\n\n<!-- END: agentic-apps-workflow sections -->\n' > "$tmp/AGENTS.md"
-
-  ( cd "$tmp"
-    SECFILE="$(mktemp)"
-    awk '
-      /^## Knowledge Capture — Ritual Tail \(spec §15\)/ {f=1}
-      /^<!-- END: agentic-apps-workflow sections -->/    {f=0}
-      f {buf[n++]=$0}
-      END { last=n-1; while (last>=0 && buf[last]=="") last--; for(i=0;i<=last;i++) print buf[i] }
-    ' "$agentstpl" > "$SECFILE"
-    awk -v secfile="$SECFILE" '
-      /^<!-- END: agentic-apps-workflow sections -->/ && !ins {
-        while ((getline line < secfile) > 0) print line
-        close(secfile); print ""; ins=1
-      }
-      { print }
-    ' AGENTS.md > AGENTS.md.tmp && mv AGENTS.md.tmp AGENTS.md
-    rm -f "$SECFILE" )
-
-  if grep -q '^## Knowledge Capture — Ritual Tail (spec §15)$' "$tmp/AGENTS.md" \
-     && grep -q '(opencode)' "$tmp/AGENTS.md"; then
-    echo "  ${GREEN}PASS${RESET} AGENTS.md section inserted with (opencode) host tag"
-    PASS=$((PASS+1))
-  else
-    echo "  ${RED}FAIL${RESET} AGENTS.md section not inserted correctly"
-    FAIL=$((FAIL+1))
-  fi
-
-  # Section lands INSIDE the marker block (before END).
-  if awk '/<!-- BEGIN: agentic-apps-workflow sections/{b=1} /^## Knowledge Capture/{if(b)k=1} /<!-- END: agentic-apps-workflow sections/{if(k)ok=1} END{exit ok?0:1}' "$tmp/AGENTS.md"; then
-    echo "  ${GREEN}PASS${RESET} section is inside the marker block (before END)"
-    PASS=$((PASS+1))
-  else
-    echo "  ${RED}FAIL${RESET} section landed outside the marker block"
-    FAIL=$((FAIL+1))
-  fi
-
-  # Idempotency: the migration's grep guard is positive now → re-apply is a no-op.
-  assert_check "idempotency: section present → skip re-insert" \
-    "grep -q '^## Knowledge Capture — Ritual Tail (spec §15)' AGENTS.md" "$tmp" "applied"
-
-  # Step 3 — version bump round-trip on a synthetic SKILL.md frontmatter.
-  printf -- '---\nname: agentic-apps-workflow\nversion: 0.2.1\nimplements_spec: 0.4.0\n---\n' > "$tmp/SKILL.md"
-  ( cd "$tmp" && sed -i.bak -E 's/^version: 0\.2\.1$/version: 0.3.0/' SKILL.md && rm -f SKILL.md.bak )
-  if grep -q '^version: 0.3.0$' "$tmp/SKILL.md" && grep -q '^implements_spec: 0.4.0$' "$tmp/SKILL.md"; then
-    echo "  ${GREEN}PASS${RESET} version bump 0.2.1→0.3.0 (implements_spec untouched)"
-    PASS=$((PASS+1))
-  else
-    echo "  ${RED}FAIL${RESET} version bump did not round-trip"
+    echo "  ${RED}FAIL${RESET} knowledge_capture payload reappeared (retired — core spec 1.2.0):"
+    printf '%s\n' "$stray" | sed 's/^/      /'
     FAIL=$((FAIL+1))
   fi
 }
@@ -606,8 +486,7 @@ test_migration_0006() {
   # The regression test proper: the two seeding paths must agree. Setup Stage C
   # copies the snapshot; migration 0000 Step 2 copies the template. A project is
   # entitled to the same config either way.
-  if diff -q <(jq -S 'del(.knowledge_capture)' "$tpl") \
-              <(jq -S 'del(.knowledge_capture)' "$snap") >/dev/null 2>&1; then
+  if diff -q <(jq -S . "$tpl") <(jq -S . "$snap") >/dev/null 2>&1; then
     echo "  ${GREEN}PASS${RESET} snapshot path == migration path (both seed one config)"
     PASS=$((PASS+1))
   else
@@ -967,10 +846,11 @@ test_migration_0010() {
   fi
 
   # 10. The relocated procedures actually landed in the trigger skill.
+  # The §15 ritual tail was one of them until core spec 1.2.0 retired §15; it is
+  # no longer asserted (there is nothing left to relocate).
   if grep -q '^## Session handoff$' "$skill" \
-     && grep -q '^## Knowledge Capture — Ritual Tail (spec §15)$' "$skill" \
      && grep -q '^## Instruction surface — eager vs lazy (spec §12)$' "$skill"; then
-    echo "  ${GREEN}PASS${RESET} handoff + §15 tail + §12 rationale present in trigger skill"; PASS=$((PASS+1))
+    echo "  ${GREEN}PASS${RESET} handoff + §12 rationale present in trigger skill"; PASS=$((PASS+1))
   else
     echo "  ${RED}FAIL${RESET} a relocated procedure is missing from the trigger skill"; FAIL=$((FAIL+1))
   fi
@@ -1497,8 +1377,6 @@ test_repo_layout() {
     migrations/0006-fix-config-conformance-claim.md \
     migrations/0007-absorb-spec-0.9.1.md \
     migrations/0008-fix-plan-review-binding-label.md \
-    skills/setup-opencode-agenticapps-workflow/templates/config-knowledge-capture.json \
-    skills/setup-opencode-agenticapps-workflow/templates/obsidian-learnings-note.md \
     docs/decisions/0008-knowledge-capture.md \
     migrations/test-fixtures/README.md \
     vendor/agenticapps-shared/migrations/lib/helpers.sh \
