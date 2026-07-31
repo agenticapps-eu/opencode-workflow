@@ -114,6 +114,11 @@ opencode-workflow/
 ├── skills/                     # 1 trigger + 14 gate + 5 GSD + 2 lifecycle = 22
 │   └── setup-opencode-agenticapps-workflow/templates/  # project-side templates + spec-mirrors
 ├── migrations/                 # framework + 0000…0004 + run-tests.sh
+├── tools/core-vendor.manifest  # THE PIN — one core commit + a sha256 per file
+├── bin/                        # resolver + materialiser, and the conformance
+│                               # harnesses' targets: core's gate and reviewer
+│                               # wrapper land here as a gitignored CACHE,
+│                               # regenerated from the pin (ADR-0013)
 ├── vendor/agenticapps-shared/  # submodule — shared migration test harness
 ├── docs/
 │   ├── ENFORCEMENT-PLAN.md     # gate bindings for this scaffolder's own dev

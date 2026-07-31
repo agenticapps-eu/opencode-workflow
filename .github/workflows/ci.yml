@@ -26,11 +26,28 @@ jobs:
             jq -e . "$j" >/dev/null && echo "valid: $j"
           done
 
+      - name: Materialise core artifacts from the pin
+        # Since ADR-0013 this host does not vendor the gate or the wrapper — it
+        # pins them in tools/core-vendor.manifest and regenerates bin/ from the
+        # pin. A fresh clone therefore does not have them, and every step below
+        # that names bin/openspec-change-gate.sh or bin/reviewer-cli.sh needs
+        # them on disk. Do it once, here.
+        #
+        # --check afterwards proves the bytes landed. `bash -n` on a missing file
+        # is an error, but the migration suite's own bootstrap is tolerant by
+        # design, so an unverified resolve could otherwise reach it as a row
+        # failure with a misleading cause.
+        run: |
+          set -euo pipefail
+          bash bin/materialise-core-artifacts.sh
+          bash bin/materialise-core-artifacts.sh --check
+
       - name: Shell syntax check
         run: |
           set -e
           for s in install.sh migrations/check-snapshot-parity.sh migrations/run-tests.sh \
                    bin/openspec-change-gate.sh bin/reviewer-cli.sh bin/git-hooks/pre-commit \
+                   bin/resolve-core-artifact.sh bin/materialise-core-artifacts.sh \
                    tools/change-gate-conformance.sh tools/reviewer-cli-conformance.sh; do
             bash -n "$s" && echo "ok: $s"
           done

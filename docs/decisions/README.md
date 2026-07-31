@@ -27,3 +27,4 @@ template shape — risk owner, re-audit date, compensating controls.
 | [0010](0010-openspec-superpowers-adoption.md) | Adopt the OpenSpec + Superpowers front end (spec v1.0.0), retiring the GSD planning engine | Accepted |
 | [0011](0011-revendor-change-gate.md) | Re-vendor the §18 change-gate from core's reference implementation (16/28 → 28/28) | Accepted |
 | [0012](0012-adopt-reviewer-cli.md) | Adopt core's reviewer-cli 1.0.0 as a vendored shared artifact (9/14 → 14/14; supersedes 0011's host-local classification) | Accepted |
+| [0013](0013-publish-core-artifacts-from-a-pin.md) | Publish core's artifacts from a pin, not from vendored copies (supersedes the re-vendoring *mechanism* of 0011 and 0012; `bin/` becomes a gitignored cache) | Accepted |

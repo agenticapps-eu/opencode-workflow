@@ -27,6 +27,20 @@ if [ -z "$REPO_ROOT" ]; then
 fi
 cd "$REPO_ROOT"
 
+# Core's gate and reviewer wrapper are PINNED, not vendored (ADR-0013): bin/ is
+# a gitignored cache regenerated from tools/core-vendor.manifest. A fresh clone
+# has neither file, and several rows below execute them. Materialise first.
+#
+# Deliberately tolerant: a resolve needs a core checkout or the network, and a
+# developer offline with neither should still get every row that does not touch
+# the gate. The rows that DO touch it then fail with their own message, and
+# test_core_pin() below reports the pin itself — so the cause is visible without
+# making the whole suite unrunnable offline.
+if [ -x "$REPO_ROOT/bin/materialise-core-artifacts.sh" ]; then
+  "$REPO_ROOT/bin/materialise-core-artifacts.sh" >/dev/null 2>&1 \
+    || echo "note: could not materialise core artifacts from the pin — gate rows will fail" >&2
+fi
+
 # Shared harness primitives — agenticapps-shared submodule (SPLIT-01, per
 # claude-workflow ADR-0035). Provides colors (RED/GREEN/YELLOW/RESET), counters
 # (PASS/FAIL/SKIP), run_check, assert_check, extract_to, run_drift_test. The
@@ -1319,12 +1333,40 @@ test_change_gate() {
   _g "escape hatch -> allow"            "$EDIT" 0 "GSD_SKIP_REVIEWS=1"
   _g "garbage stdin -> allow"           'not json $$$' 0
   mkdir -p "$t/openspec/changes/add-thing"
-  _g "active, validate green, 0 reviews -> block" "$EDIT" 2
+
+  # ── gate 2.0.0: REVIEWS NO LONGER BLOCK ───────────────────────────────────
+  # Until this host re-pinned to core ef030d0 it ran gate 1.3.1, where an active
+  # change with < 2 reviewers exited 2. Under 2.0.0 exactly two things block —
+  # a missing `openspec` CLI and a failing `openspec validate --all` — and both
+  # are errors in the change itself: local, deterministic, no vendor CLIs
+  # involved. Missing, stale and objecting review evidence are all REPORTED and
+  # never enforced, because a missing review is a missing OPINION, and the
+  # blocking version's measured cost was three rollbacks and a six-repo outage
+  # against no prevented defect.
+  #
+  # So these rows now pin ALLOW where they used to pin BLOCK. That is the
+  # adopted behaviour, not a weakened test: the review-count rows moved to the
+  # conformance harness, which scores the same gate over 71 rows including the
+  # counting and reporting it kept.
+  _g "active, validate green, 0 reviews -> allow (reported)" "$EDIT" 0
   printf '## Reviewer: gemini\nAPPROVE\n' > "$t/openspec/changes/add-thing/REVIEWS.md"
-  _g "active, 1 reviewer -> block"      "$EDIT" 2
+  _g "active, 1 reviewer -> allow (reported)" "$EDIT" 0
   printf '## Reviewer: gemini\nAPPROVE\n## Reviewer: codex\nAPPROVE\n' > "$t/openspec/changes/add-thing/REVIEWS.md"
   _g "active, 2 reviewers -> allow"     "$EDIT" 0
-  _g "validate FAILS, 2 reviewers -> block" "$EDIT" 2 "OSTUB_RC=1"
+
+  # The two conditions that DO still block. `validate` failing was already
+  # covered; the missing CLI was not, and with reviews advisory it is now half
+  # of everything the gate enforces — an untested half would leave the truth
+  # table naming one of the gate's two remaining rules.
+  _g "validate FAILS -> block"          "$EDIT" 2 "OSTUB_RC=1"
+  local rc_nocli
+  ( cd "$t" && printf '%s' "$EDIT" | env PATH=/usr/bin:/bin "$gate" >/dev/null 2>&1 )
+  rc_nocli=$?
+  if [ "$rc_nocli" -eq 2 ]; then
+    echo "  ${GREEN}PASS${RESET} no openspec CLI -> block (exit $rc_nocli)"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} no openspec CLI -> block (exit $rc_nocli, expected 2)"; FAIL=$((FAIL+1))
+  fi
 
   rm -rf "$t"
 }
@@ -1388,6 +1430,9 @@ test_repo_layout() {
     skills/opencode-ts-declare-first/templates/example.declare.ts \
     skills/opencode-ts-declare-first/templates/example.test.ts \
     skills/opencode-ts-declare-first/templates/example.impl.ts \
+    tools/core-vendor.manifest \
+    bin/resolve-core-artifact.sh \
+    bin/materialise-core-artifacts.sh \
     install.sh ; do
     if [ -f "$f" ]; then
       echo "  ${GREEN}PASS${RESET} $f exists"
@@ -1397,6 +1442,98 @@ test_repo_layout() {
       FAIL=$((FAIL+1))
     fi
   done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The core pin (ADR-0013) — tools/core-vendor.manifest
+#
+# The manifest makes two claims a test can check. First, that the files it
+# names are the files on disk: the three VENDORED entries must hash to their
+# recorded sha256, or the copy in the repo is not the revision the pin says it
+# is. Second, that ONE commit covers EVERY file this repo takes from core — a
+# manifest naming three of five files is internally consistent while recording
+# nothing about the two it omits, so the entry list is asserted explicitly
+# rather than merely iterated.
+#
+# The RESOLVED entries are checked through materialise --check, which is the
+# same verification install.sh performs before publishing into the shared
+# ~/.agenticapps/bin/.
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_core_pin() {
+  echo ""
+  echo "${YELLOW}=== core pin — tools/core-vendor.manifest ===${RESET}"
+
+  local manifest="$REPO_ROOT/tools/core-vendor.manifest"
+  if [ ! -f "$manifest" ]; then
+    echo "  ${RED}FAIL${RESET} tools/core-vendor.manifest missing — core-derived files with no recorded provenance"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  local commit
+  commit="$(awk '/^core_commit=/ { sub(/^core_commit=/, ""); print; exit }' "$manifest")"
+  if [ "${#commit}" -eq 40 ] && [ -z "${commit//[0-9a-f]/}" ]; then
+    echo "  ${GREEN}PASS${RESET} core_commit is a full 40-char sha (${commit:0:7})"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} core_commit is not a full 40-char hex sha: '$commit'"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Every file this repo takes from core is listed — asserted as a set, so
+  # dropping an entry is a failure and not merely a shorter loop.
+  local want_entries="bin/openspec-change-gate.sh bin/reviewer-cli.sh bin/resolve-core-artifact.sh tools/change-gate-conformance.sh tools/reviewer-cli-conformance.sh"
+  local f missing=""
+  for f in $want_entries; do
+    grep -q "^file=$f " "$manifest" || missing="$missing $f"
+  done
+  if [ -z "$missing" ]; then
+    echo "  ${GREEN}PASS${RESET} manifest pins all 5 core-derived files"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} manifest is missing entries:$missing"
+    FAIL=$((FAIL+1))
+  fi
+
+  # VENDORED entries: bytes on disk == bytes named in the pin.
+  local sha want
+  for f in bin/resolve-core-artifact.sh tools/change-gate-conformance.sh tools/reviewer-cli-conformance.sh; do
+    want="$(awk -v k="$f" '$0 ~ "^file="k"[[:space:]]" {
+      for (i = 1; i <= NF; i++) if ($i ~ /^sha256=/) { sub(/^sha256=/, "", $i); print $i; exit } }' "$manifest")"
+    sha="$(shasum -a 256 "$REPO_ROOT/$f" 2>/dev/null | awk '{print $1}')"
+    if [ -n "$want" ] && [ "$sha" = "$want" ]; then
+      echo "  ${GREEN}PASS${RESET} $f matches the pin"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} $f does NOT match the pin (want ${want:0:12}…, got ${sha:0:12}…)"
+      FAIL=$((FAIL+1))
+    fi
+  done
+
+  # RESOLVED entries: the cache is present and verified, exactly as install.sh
+  # checks it before publishing.
+  if "$REPO_ROOT/bin/materialise-core-artifacts.sh" --check >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} resolved artifacts (gate + wrapper) materialised and match the pin"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} resolved artifacts absent or not matching the pin (run bin/materialise-core-artifacts.sh)"
+    FAIL=$((FAIL+1))
+  fi
+
+  # The RESOLVED pair must NOT be committed. A tracked copy is a copy that
+  # drifts, which is the whole condition ADR-0013 removed — and it would come
+  # back silently, since the bytes would be correct on the day they landed.
+  local tracked=""
+  for f in bin/openspec-change-gate.sh bin/reviewer-cli.sh; do
+    git -C "$REPO_ROOT" ls-files --error-unmatch "$f" >/dev/null 2>&1 && tracked="$tracked $f"
+  done
+  if [ -z "$tracked" ]; then
+    echo "  ${GREEN}PASS${RESET} resolved artifacts are a cache, not tracked files"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} resolved artifacts are tracked in git (re-vendoring by accident):$tracked"
+    FAIL=$((FAIL+1))
+  fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1505,6 +1642,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "gate" ]; then
   test_change_gate
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "pin" ]; then
+  test_core_pin
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "arbitration" ]; then

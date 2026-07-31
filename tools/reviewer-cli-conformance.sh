@@ -29,6 +29,27 @@ set -uo pipefail
 
 pass=0
 fail=0
+
+# ── target screening (capability: conformance-harness-reporting) ─────────────
+# This harness's explicit-path handling was already correct — it scored a
+# missing target as a failure row rather than skipping it, and is the reference
+# the other harnesses were fixed against. What it lacked was a REASON: every
+# unscoreable target was reported as "file not found", including directories,
+# empty files and unreadable ones.
+harness_screen_target() { # $1 = path; sets REASON, returns 1 if unscoreable
+  REASON=""
+  if [ -L "$1" ] && [ ! -e "$1" ]; then REASON="not a regular file (dangling symlink)"; return 1; fi
+  if [ ! -e "$1" ]; then REASON="not found"; return 1; fi
+  if [ ! -f "$1" ]; then REASON="not a regular file"; return 1; fi
+  if [ ! -s "$1" ]; then REASON="empty"; return 1; fi
+  if [ ! -r "$1" ]; then REASON="unreadable"; return 1; fi
+  return 0
+}
+
+harness_safe_label() { # $1 = path
+  printf '%s' "$1" | LC_ALL=C tr -c '[:print:]' '?'
+}
+
 WORK=""
 
 # Used to bound the harness's own invocations of the wrapper under test. Distinct
@@ -56,10 +77,12 @@ make_fixture() {
   for v in $VENDORS; do
     cat > "$d/stub/$v" <<'STUB'
 #!/usr/bin/env bash
-# Record whether stdin is empty. `cat` on a pinned /dev/null returns nothing;
-# without the pin this inherits the caller's stdin and would read the payload.
-seen="$(cat 2>/dev/null | head -c 100)"
-printf '%s' "$seen" > "$STDIN_WITNESS"
+# Records what this vendor was actually handed, on both channels.
+#   stdin — must never carry the CALLER's payload (isolation)
+#   argv  — must never carry the prompt's CONTENT (the 1.2.0 property)
+[ -n "${ARGV_WITNESS:-}" ] && printf '%s\n' "$@" > "$ARGV_WITNESS"
+seen="$(cat 2>/dev/null | head -c 200)"
+[ -n "${STDIN_WITNESS:-}" ] && printf '%s' "$seen" > "$STDIN_WITNESS"
 printf 'VERDICT ok\n'
 STUB
     chmod +x "$d/stub/$v"
@@ -115,33 +138,62 @@ run_row_stderr_matches() { # $1=desc $2=expected-substring $3...=argv
   esac
 }
 
-# Asserts the wrapper produced the stub's output AND left stdin empty. The
-# stdin half is the row that pins the hardening: a wrapper that forgets the
-# redirect on one arm still exits 0 and still prints a verdict, so exit code
-# alone cannot see it.
-run_row_stdin_pinned() { # $1=vendor
+# Asserts the wrapper dispatched AND that the CALLER'S ambient stdin never
+# reaches the vendor.
+#
+# At 1.1.0 this row read "stdin is pinned to /dev/null", because the prompt
+# travelled in argv and stdin had no job but to reach EOF. At 1.2.0 the prompt
+# travels ON stdin — the argv exposure is the defect being fixed — so "the
+# vendor read nothing" is no longer the property. What survives, and is what
+# the row was really protecting, is ISOLATION: whatever the wrapper's own
+# caller happens to have on stdin must not be handed to a third-party CLI.
+#
+# The never-blocks guarantee is unchanged and still structural: every arm
+# redirects stdin from something that reaches EOF — a regular file rather than
+# /dev/null. A wrapper that forgot a redirect on one arm would leak the
+# caller's payload, which this row sees.
+run_row_stdin_isolated() { # $1=vendor
   local v="$1" out
   : > "$FX/stdin.witness"
-  # A finite payload down a pipe that closes: an unpinned wrapper reads it (and
-  # fails on the witness) rather than blocking on an open stdin.
   out="$(
     printf 'LEAKED PAYLOAD\n' | PATH="$FX/stub:$PATH" STDIN_WITNESS="$FX/stdin.witness" \
       bounded_cli "$v" "$FX/prompt.txt" 2>/dev/null
   )"
   local witness; witness="$(cat "$FX/stdin.witness" 2>/dev/null)"
-  if [ "$out" = "VERDICT ok" ] && [ -z "$witness" ]; then
-    echo "  PASS  $v: dispatches and pins stdin to /dev/null"; pass=$((pass + 1))
-  elif [ "$out" != "VERDICT ok" ]; then
+  if [ "$out" != "VERDICT ok" ]; then
     echo "  FAIL  $v: arm did not dispatch (got '${out:-<empty>}')"; fail=$((fail + 1))
+  elif printf '%s' "$witness" | grep -q 'LEAKED PAYLOAD'; then
+    echo "  FAIL  $v: caller's stdin REACHED the vendor — '$witness'"; fail=$((fail + 1))
   else
-    echo "  FAIL  $v: stdin NOT pinned — vendor read '$witness'"; fail=$((fail + 1))
+    echo "  PASS  $v: dispatches; caller stdin isolated from the vendor"; pass=$((pass + 1))
+  fi
+}
+
+# The 1.2.0 property proper: no change content in argv. A vendor CLI's argv is
+# world-readable in the process table for as long as it runs, and the prompt is
+# the entire change.
+run_row_no_argv_leak() { # $1=vendor
+  local v="$1"
+  : > "$FX/argv.witness"
+  PATH="$FX/stub:$PATH" ARGV_WITNESS="$FX/argv.witness" \
+    bounded_cli "$v" "$FX/prompt.txt" >/dev/null 2>&1 </dev/null
+  if grep -q 'review this change' "$FX/argv.witness" 2>/dev/null; then
+    echo "  FAIL  $v: prompt CONTENT appeared in the vendor's argv"; fail=$((fail + 1))
+  else
+    echo "  PASS  $v: prompt content never enters argv"; pass=$((pass + 1))
   fi
 }
 
 score_one() {
   CLI="$1"
-  echo "═══ $CLI"
-  [ -f "$CLI" ] || { echo "  FAIL  file not found"; fail=$((fail + 1)); return; }
+  # $2 is a stable logical label from roster mode; without it the heading
+  # printed a resolved absolute path, carrying $HOME into CI logs and making
+  # two sweeps on different machines undiffable.
+  echo "═══ ${2:-$(harness_safe_label "$CLI")}"
+  if ! harness_screen_target "$CLI"; then
+    echo "  UNSCOREABLE  ${2:-$(harness_safe_label "$CLI")} — $REASON"
+    fail=$((fail + 1)); return
+  fi
   FX="$(make_fixture)"; WORK="$FX"
 
   echo "  ── A. Argument handling ──"
@@ -159,8 +211,9 @@ score_one() {
     run_row "$v arm is dispatchable" 0 "$v" "$FX/prompt.txt"
   done
 
-  echo "  ── C. Hardening (stdin pinned, per arm) ──"
-  for v in $VENDORS; do run_row_stdin_pinned "$v"; done
+  echo "  ── C. Hardening (stdin isolated, no argv leak, per arm) ──"
+  for v in $VENDORS; do run_row_stdin_isolated "$v"; done
+  for v in $VENDORS; do run_row_no_argv_leak "$v"; done
 
   echo "  ── D. Timeout contract ──"
   # A vendor CLI that outlives the cap must surface as the wrapper's die (3),
@@ -195,21 +248,73 @@ SLOW
 }
 
 # ── entry ────────────────────────────────────────────────────────────────────
-if [ "${1:-}" = "--family" ]; then
-  root="$(cd "$(dirname "$0")/../.." && pwd)"
-  targets=""
-  for h in claude-workflow codex-workflow opencode-workflow pi-agentic-apps-workflow; do
-    [ -f "$root/$h/bin/reviewer-cli.sh" ] && targets="$targets $root/$h/bin/reviewer-cli.sh"
-  done
-  [ -f "$HOME/.agenticapps/bin/reviewer-cli.sh" ] && targets="$targets $HOME/.agenticapps/bin/reviewer-cli.sh"
-  # The canonical goes first so a fleet run reads as "the bar, then the fleet".
-  set -- "$(dirname "$0")/../reference-implementations/reviewer-cli/reviewer-cli.sh" $targets
+USAGE="usage: $0 <path-to-reviewer-cli> [...]  |  --family"
+
+FAMILY_MODE=0
+if [ "${1:-}" = "--family" ]; then FAMILY_MODE=1; shift; fi
+
+# A roster flag with explicit paths used to discard the paths silently — the
+# same defect this harness exists to close, reached through argument parsing.
+if [ "$FAMILY_MODE" = "1" ] && [ "$#" -gt 0 ]; then
+  echo "$USAGE" >&2
+  echo "--family cannot be combined with explicit target paths (got: $(harness_safe_label "$1"))" >&2
+  exit 2
 fi
 
-[ "$#" -ge 1 ] || { echo "usage: $0 <path-to-reviewer-cli> [...]  |  --family" >&2; exit 2; }
+if [ "$FAMILY_MODE" = "1" ]; then
+  root="$(cd "$(dirname "$0")/../.." && pwd)"
+  # label|path. The canonical goes first so a fleet run reads as "the bar,
+  # then the fleet". Entries are named by a stable logical label throughout.
+  ROSTER="core|$(dirname "$0")/../reference-implementations/reviewer-cli/reviewer-cli.sh
+claude-workflow|$root/claude-workflow/bin/reviewer-cli.sh
+codex-workflow|$root/codex-workflow/bin/reviewer-cli.sh
+opencode-workflow|$root/opencode-workflow/bin/reviewer-cli.sh
+pi-agentic-apps-workflow|$root/pi-agentic-apps-workflow/bin/reviewer-cli.sh
+shared-install|$HOME/.agenticapps/bin/reviewer-cli.sh"
 
-for target in "$@"; do score_one "$target"; done
+  roster_total=0 roster_scored=0 roster_unscored=""
+  # The absence filter runs AFTER the argument-count check, never before it.
+  while IFS='|' read -r label path; do
+    [ -n "$label" ] || continue
+    roster_total=$((roster_total + 1))
+    if harness_screen_target "$path"; then
+      p0="$pass"; f0="$fail"
+      score_one "$path" "$label"
+      # An entry counts as scored only if it contributed a scored row —
+      # otherwise `scored 6 of 6` is reachable with a scored total of zero.
+      if [ $((pass - p0 + fail - f0)) -gt 0 ]; then
+        roster_scored=$((roster_scored + 1))
+      else
+        roster_unscored="$roster_unscored  $label — reached but produced no scored row"$'\n'
+      fi
+    else
+      host_dir="${path%/bin/reviewer-cli.sh}"
+      if [ "$REASON" = "not found" ] &&
+         [ -f "$host_dir/bin/resolve-core-artifact.sh" ] &&
+         [ -f "$host_dir/tools/core-vendor.manifest" ]; then
+        roster_unscored="$roster_unscored  $label — not vendored; resolvable from pin, not attempted"$'\n'
+      else
+        roster_unscored="$roster_unscored  $label — $REASON"$'\n'
+      fi
+    fi
+  done <<< "$ROSTER"
+
+  echo
+  # Emitted on every roster run, complete ones included: a line that appears
+  # only when something is wrong becomes the signal, and its absence then has
+  # to be noticed to mean anything.
+  echo "═══ COVERAGE: scored $roster_scored of $roster_total roster entries"
+  [ -n "$roster_unscored" ] && printf '%s' "$roster_unscored"
+else
+  [ "$#" -ge 1 ] || { echo "$USAGE" >&2; exit 2; }
+  for target in "$@"; do score_one "$target"; done
+fi
 
 echo
 echo "═══ TOTAL: $pass passed, $fail failed"
+# Backstop, folded into the one place the exit code is computed.
+if [ $((pass + fail)) -eq 0 ]; then
+  echo "openspec-conformance: certified NOTHING — no row reached a verdict" >&2
+  exit 1
+fi
 [ "$fail" -eq 0 ]
