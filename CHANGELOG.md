@@ -9,6 +9,41 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
+### Changed
+
+- **Core's artifacts are PINNED, not vendored** ([ADR-0013](docs/decisions/0013-publish-core-artifacts-from-a-pin.md)).
+  `tools/core-vendor.manifest` names one core commit
+  (`ef030d0430e6c0df6dc13ab567baab3f9e006dbe`, core main at the merge of core
+  PR #49) and a sha256 for each of the five files this repo takes from core.
+  `bin/resolve-core-artifact.sh` produces verified bytes from a local checkout
+  at that commit or from GitHub and refuses anything that does not hash to the
+  pin; `bin/materialise-core-artifacts.sh` puts them at `bin/`.
+
+  `bin/openspec-change-gate.sh` and `bin/reviewer-cli.sh` are **no longer
+  committed** — they are a gitignored cache regenerated from the pin. Six
+  consumers need them at that stable path, including the shipped migration
+  0011, so this host caches where `claude-workflow` deleted. `install.sh` fails
+  CLOSED: it will not publish into the shared `~/.agenticapps/bin/` what it
+  cannot verify.
+
+  Ends the re-vendor PR (this repo merged six: #16 #17 #18 #19 #20 #21). A core
+  release now arrives by advancing one commit and five hashes.
+
+- **Gate 1.3.1 → 2.0.0, reviewer-cli 1.1.0 → 1.2.0.** This host had missed the
+  release in which **reviews stopped blocking**. Under gate 2.0.0 the only
+  blocking clauses are a failing `openspec validate --all` and a missing
+  `openspec` CLI; missing, stale and objecting review evidence are REPORTED and
+  never enforced. Two rows of the change-gate truth-table test that pinned
+  BLOCK for an unreviewed change now pin ALLOW, and a previously-untested row
+  pins the missing-CLI block.
+
+- **Both conformance harnesses re-vendored at the same pin**, bringing core spec
+  1.4.0 / §20: a harness that scored nothing is no longer green. A named target
+  that is absent, empty or unreadable now reports
+  `UNSCOREABLE <label> — <reason>` and exits non-zero, and `--family` declares
+  `COVERAGE: scored N of M`, reporting a pin-and-resolve host as *resolvable
+  from pin, not attempted* rather than silently sweeping one host fewer.
+
 ### Removed
 
 - **Knowledge capture (spec §15) — every live surface on this host.** Core

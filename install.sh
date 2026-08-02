@@ -330,6 +330,43 @@ echo "  ${GREEN}GATE${RESET}   $AA_BIN/openspec-change-gate.sh   (host-agnostic 
 echo "  ${GREEN}GATE${RESET}   $AA_BIN/reviewer-cli.sh           (reviewer-CLI wrapper)"
 echo "  ${GREEN}HOOK${RESET}   $OPENCODE_PLUGIN_DIR/openspec-change-gate.ts  (opencode tool.execute.before)"
 echo "  ${GREEN}HOOK${RESET}   .git/hooks/pre-commit             (agent-agnostic floor)"
+
+# ── where the gate and the wrapper come from (ADR-0013) ──────────────────────
+# This repo does NOT vendor them. tools/core-vendor.manifest records WHICH core
+# revision it trusts and WHAT each file must hash to; materialise-core-artifacts.sh
+# turns that into verified bytes at bin/, and the arbitration above then decides
+# whether to publish them into the shared $AA_BIN.
+#
+# bin/ is a CACHE, not source: both files are gitignored and regenerated from the
+# pin, so they cannot drift. Vendoring is what this replaced — the copies existed
+# only to feed this script, and on 2026-07-31 they were gate 1.3.1 against core's
+# 2.0.0 and wrapper 1.1.0 against 1.2.0. Arbitration meant that was never
+# destructive, only silently useless: a fresh machine installed from this host
+# alone got the OLD gate and nothing said so.
+#
+# Fails CLOSED. An installer that cannot verify what it is about to publish into
+# a directory shared by every agent on this machine must stop. It does NOT fall
+# back to a copy on disk — that fallback, run today, would republish 1.3.1 over
+# 2.0.0 for every agent here.
+if [ "$DRY_RUN" -eq 0 ]; then
+  if ! "$SCAFFOLDER_ROOT/bin/materialise-core-artifacts.sh"; then
+    echo "  ${RED}FAIL${RESET}   could not materialise core's artifacts from the pin."
+    echo "           Nothing was published. Fix the pin or the source, then re-run."
+    echo "           Offline with no core checkout? Clone core beside this repo, or"
+    echo "           set CORE_CHECKOUT=/path/to/agenticapps-workflow-core."
+    exit 1
+  fi
+  echo "  ${GREEN}PIN${RESET}    core artifacts materialised from $(sed -n 's/^core_commit=\(.\{7\}\).*/\1/p' "$SCAFFOLDER_ROOT/tools/core-vendor.manifest")"
+else
+  # Dry-run writes nothing, including to the cache. Report whether the cache is
+  # already current instead — an accurate "would resolve" beats a silent write.
+  if "$SCAFFOLDER_ROOT/bin/materialise-core-artifacts.sh" --check 2>/dev/null; then
+    echo "  ${GREEN}PIN${RESET}    core artifacts already match the pin (nothing to resolve)"
+  else
+    echo "  ${YELLOW}PIN${RESET}    would resolve core's gate + wrapper from tools/core-vendor.manifest"
+  fi
+fi
+
 if [ "$DRY_RUN" -eq 0 ]; then
   mkdir -p "$AA_BIN" "$OPENCODE_PLUGIN_DIR" "$HOME/.agenticapps/git-hooks"
   # Gate: install only if this is not a downgrade of the shared copy (issue #15).
